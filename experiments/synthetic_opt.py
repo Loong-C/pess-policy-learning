@@ -14,6 +14,8 @@ def main():
     parser = argparse.ArgumentParser(description="Run Section 7.2.2 and 7.2.4 Thompson Sampling experiments.")
     parser.add_argument("--mode", choices=["quick", "full"], default="quick")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--jobs", type=int, default=1)
+    parser.add_argument("--resume", action="store_true")
     parser.add_argument("--cv-only", action="store_true", help="Only run the Section 7.2.4 cross-validation experiment.")
     parser.add_argument("--setting", type=int, default=None, help="Accepted for compatibility; maintained runner includes setting 2.")
     parser.add_argument("--T", type=int, default=None, help="Accepted for compatibility; use --mode to select the maintained grid.")
@@ -22,9 +24,9 @@ def main():
     args = parser.parse_args()
 
     outdir = outdir_for(args.mode)
-    run_ts_synthetic(args.mode, seed=args.seed, cv_only=args.cv_only)
+    run_ts_synthetic(args.mode, seed=args.seed, cv_only=args.cv_only, jobs=args.jobs, resume=args.resume)
     if not args.cv_only:
-        run_ts_synthetic(args.mode, seed=args.seed, cv_only=True)
+        run_ts_synthetic(args.mode, seed=args.seed, cv_only=True, jobs=args.jobs, resume=args.resume)
     report = summarize(outdir)
     print(f"wrote {report}")
 

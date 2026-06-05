@@ -45,7 +45,15 @@ The maintained entry point is:
 python experiments/reproduce.py --mode quick --experiment all --seed 20260605
 ```
 
-Available experiments are `mab`, `tree`, `ts`, `ts-cv`, `real`, and `all`.
+Available experiments are `mab`, `tree`, `ts`, `ts-cv`, `real`, and `all`. Slow experiments support chunk-level parallelism and resume:
+
+```bash
+python experiments/reproduce.py --mode full --experiment tree --jobs 16 --resume --seed 20260605
+python experiments/reproduce.py --mode full --experiment ts --jobs 16 --resume --seed 20260605
+python experiments/reproduce.py --mode full --experiment real --jobs 4 --resume --seed 20260605
+```
+
+Completed chunks are written below `artifacts/reproduction/<mode>/data/chunks/`; rerunning with `--resume` skips chunks already on disk.
 
 `quick` mode is a smoke-test mode that keeps runtime manageable. `full` mode keeps the paper-scale settings where feasible:
 
@@ -68,6 +76,23 @@ Generated artifacts are stored in `artifacts/reproduction/`:
 - `reproduction_report_zh.md`: Chinese report comparing the generated results with the paper and explaining statistical confidence.
 
 The full Figure 5-10 grids were not all completed in this interaction because they require very large numbers of R `policytree` fits, especially for 33 OpenML datasets with 5-fold CV. The code paths and commands are present; the committed completed full-scale result is the MAB experiment.
+
+## Statistical comparison with the paper
+
+A statistically meaningful "successful reproduction" claim needs numeric paper references, not only visual inspection of the published figures. Use `experiments/compare_to_paper.py` once you have a CSV with `paper_mean` and matching key columns, optionally `paper_se` or `paper_sd` plus `paper_count`:
+
+```bash
+python experiments/compare_to_paper.py \
+  --ours artifacts/reproduction/full/data/mab_results.csv \
+  --paper artifacts/reproduction/paper_reference_mab.csv \
+  --metric rescaled_subopt \
+  --keys setting_name,T,method \
+  --margin 0.005 \
+  --alpha 0.05 \
+  --out artifacts/reproduction/mab_paper_comparison.csv
+```
+
+The script uses a two one-sided tests equivalence check. Without numeric paper references and a pre-declared equivalence margin, the current artifacts only support a partial qualitative reproduction statement, not a formal statistical success claim.
 
 ## Repository layout
 

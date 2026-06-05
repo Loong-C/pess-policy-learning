@@ -99,3 +99,27 @@ Results and caveats:
 - Quick real-data run uses a deliberately small `cmc` subset and is not statistically conclusive (`PPL - GPL` mean improvement about 0.0058, one-sided p about 0.25).
 - Full Figure 5-10 grids were not completed in this interaction. A real-data run using a larger quick subset exceeded 20 minutes and left no CSV before timeout, so quick real was narrowed to a smoke subset. Full mode remains configured for the paper-scale commands, but running it will require substantially more wall-clock time.
 - Current OpenML metadata for `houses` has 3842 unique target values (`median_house_value`), which conflicts with the paper's classification-to-bandit assumption. Added a max-arm guard in the real-data transform and a `real_skipped.csv` path for such cases.
+
+## 2026-06-05 22:11:17 +08:00
+
+Scope: modified the reproduction runner for future full-scale execution and clarified the statistical success criterion. No new experiment grid was run in this step.
+
+Runner changes:
+- Added `--jobs` and `--resume` to `experiments/reproduce.py`.
+- Split slow experiments into chunk-level tasks:
+  - Section 7.1.2 tree experiments: one chunk per scenario/sample-size/decay cell.
+  - Section 7.2 TS experiments: one chunk per setting/sample-size/batch/floor cell.
+  - Section 7.2.4 TS-CV: one chunk per sample-size/floor cell.
+  - Section 7.3 real data: one chunk per OpenML dataset to avoid repeated dataset loading.
+- Chunk CSVs are stored under `artifacts/reproduction/<mode>/data/chunks/`; `--resume` skips existing chunks and recombines outputs.
+- Compatibility wrapper scripts now accept `--jobs` and `--resume`.
+
+Statistical comparison changes:
+- Added `experiments/compare_to_paper.py` for future numeric comparison against paper references using two one-sided tests (TOST) with a user-specified equivalence margin.
+- Updated `README.md` with parallel/resume commands and the formal comparison workflow.
+- Rewrote the top of `artifacts/reproduction/reproduction_report_zh.md` to answer the actual reproduction question: current artifacts do not justify a statistically significant "successful reproduction" claim. They support partial qualitative reproduction only, because Figure 5-10 full grids have not been completed and numeric paper references/equivalence margins are not yet available.
+
+Validation:
+- Ran `python -m compileall -q experiments`.
+- Checked `python experiments/reproduce.py --help`.
+- Checked `python experiments/compare_to_paper.py --help`.

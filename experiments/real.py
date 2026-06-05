@@ -14,6 +14,8 @@ def main():
     parser = argparse.ArgumentParser(description="Run Section 7.3 OpenML real-data experiments.")
     parser.add_argument("--mode", choices=["quick", "full"], default="quick")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--jobs", type=int, default=1)
+    parser.add_argument("--resume", action="store_true")
     parser.add_argument("--data", type=int, default=None, help=f"Accepted for compatibility; maintained runner uses {len(REAL_DATASETS)} paper datasets in full mode.")
     parser.add_argument("--setting", type=int, default=None, help="Accepted for compatibility; maintained runner evaluates all paper exploration settings.")
     parser.add_argument("--beta_id", type=int, default=None, help="Accepted for compatibility; beta is selected by Algorithm 2 cross-validation.")
@@ -22,7 +24,7 @@ def main():
     args = parser.parse_args()
 
     outdir = outdir_for(args.mode)
-    run_real(args.mode, seed=args.seed)
+    run_real(args.mode, seed=args.seed, jobs=args.jobs, resume=args.resume)
     report = summarize(outdir)
     print(f"wrote {report}")
 

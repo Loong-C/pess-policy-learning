@@ -1,10 +1,12 @@
 ﻿from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sys
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -97,6 +99,53 @@ def outdir_for(mode: str) -> Path:
     (outdir / "data").mkdir(parents=True, exist_ok=True)
     (outdir / "figures").mkdir(parents=True, exist_ok=True)
     return outdir
+
+
+def _stable_seed(seed: int, *parts) -> int:
+    h = hashlib.blake2b(digest_size=8)
+    h.update(str(seed).encode("utf-8"))
+    for part in parts:
+        h.update(b"|")
+        h.update(str(part).encode("utf-8"))
+    return int.from_bytes(h.digest(), "little") % (2**31 - 1)
+
+
+def _chunk_path(chunk_dir: Path, task: dict) -> Path:
+    return chunk_dir / f"{task['task_id']}.csv"
+
+
+def _run_chunked(tasks, worker, chunk_dir: Path, combined_path: Path | None, jobs: int = 1, resume: bool = False) -> pd.DataFrame:
+    """Run independent task chunks with optional process-level parallelism."""
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+    if not resume:
+        for path in chunk_dir.glob("*.csv"):
+            path.unlink()
+
+    pending = [task for task in tasks if not (resume and _chunk_path(chunk_dir, task).exists())]
+    jobs = max(1, int(jobs))
+
+    def write_result(task, result):
+        df = result if isinstance(result, pd.DataFrame) else pd.DataFrame(result)
+        df.to_csv(_chunk_path(chunk_dir, task), index=False)
+
+    if jobs == 1:
+        for task in pending:
+            write_result(task, worker(task))
+    elif pending:
+        with ProcessPoolExecutor(max_workers=jobs) as executor:
+            future_map = {executor.submit(worker, task): task for task in pending}
+            for future in as_completed(future_map):
+                task = future_map[future]
+                write_result(task, future.result())
+
+    frames = []
+    for path in sorted(chunk_dir.glob("*.csv")):
+        if path.stat().st_size > 0:
+            frames.append(pd.read_csv(path))
+    df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    if combined_path is not None:
+        df.to_csv(combined_path, index=False)
+    return df
 
 
 def _safe_argmax(values: np.ndarray) -> int:
@@ -330,43 +379,70 @@ def eval_linear_pevi(model, eval_data, beta: float) -> tuple[np.ndarray, np.ndar
     return pred, rewards, float(np.mean(rewards))
 
 
-def run_contextual_nonadaptive(mode: str, seed: int = 0) -> pd.DataFrame:
-    cfg = mode_config(mode)
-    outdir = outdir_for(mode)
-    rng = np.random.default_rng(seed)
+def _run_contextual_task(task: dict) -> pd.DataFrame:
+    cfg = ModeConfig(**task["cfg"])
+    seed = int(task["seed"])
+    scenario = int(task["scenario"])
+    T = int(task["T"])
+    decay = task["decay"]
+    decay_label = task["decay_label"]
     beta_list = [0.0001, 0.001, 0.01, 0.1, 0.2, 0.5, 1, 5, 10]
-    t_list = [1000, 2000, 3000, 4000, 5000] if mode == "full" else [300, 600]
-    decays = [0.2, 0.4, 0.6, 0.8, None] if mode == "full" else [0.5, None]
+    eval_data = MultiQuad(2, 10, sigma=0).sample_data(cfg.t_eval, seed=_stable_seed(seed, "tree_eval", scenario, T, decay_label))
     rows = []
 
+    for rep in range(cfg.tree_nrep):
+        rep_seed = _stable_seed(seed, "tree", scenario, T, decay_label, rep)
+        rep_rng = np.random.default_rng(rep_seed + 17)
+        dgp = MultiQuad(2, 10, sigma=0.1)
+        data = dgp.sample_data(T, seed=rep_seed)
+        xs, ys, muxs = data["xs"], data["ys"], data["muxs"]
+        ps = _contextual_propensities(muxs, scenario, decay)
+        ws = np.array([rep_rng.choice(10, p=ps[i]) for i in range(T)], dtype=int)
+        yobs = ys[np.arange(T), ws]
+
+        greedy = PL_greedy(xs, yobs, ws, ps, depth=5)
+        _, _, rw_greedy = eval_ptree(greedy, eval_data)
+        rows.append({"experiment": "tree", "scenario": scenario, "T": T, "decay": decay_label, "rep": rep, "method": "greedy", "beta": 0.0, "value": rw_greedy})
+        lin_model = fit_linear_pevi(xs, yobs, ws, arm_count=10)
+        for beta in beta_list:
+            tree, _ = PL_pessimism(xs, yobs, ws, ps, beta=beta, depth=5)
+            _, _, value = eval_ptree(tree, eval_data)
+            rows.append({"experiment": "tree", "scenario": scenario, "T": T, "decay": decay_label, "rep": rep, "method": "pess", "beta": beta, "value": value})
+            _, _, lin_value = eval_linear_pevi(lin_model, eval_data, beta=beta)
+            rows.append({"experiment": "tree", "scenario": scenario, "T": T, "decay": decay_label, "rep": rep, "method": "lin", "beta": beta, "value": lin_value})
+    return pd.DataFrame(rows)
+
+
+def run_contextual_nonadaptive(mode: str, seed: int = 0, jobs: int = 1, resume: bool = False) -> pd.DataFrame:
+    cfg = mode_config(mode)
+    outdir = outdir_for(mode)
+    t_list = [1000, 2000, 3000, 4000, 5000] if mode == "full" else [300, 600]
+    decays = [0.2, 0.4, 0.6, 0.8, None] if mode == "full" else [0.5, None]
+    tasks = []
     for scenario in [1, 2, 3]:
         for T in t_list:
-            eval_data = MultiQuad(2, 10, sigma=0).sample_data(cfg.t_eval, seed=seed + scenario + T)
             for decay in decays:
                 decay_label = "pure" if decay is None else str(decay)
-                for rep in range(cfg.tree_nrep):
-                    rep_seed = int(rng.integers(0, 2**31 - 1))
-                    rep_rng = np.random.default_rng(rep_seed + 17)
-                    dgp = MultiQuad(2, 10, sigma=0.1)
-                    data = dgp.sample_data(T, seed=rep_seed)
-                    xs, ys, muxs = data["xs"], data["ys"], data["muxs"]
-                    ps = _contextual_propensities(muxs, scenario, decay)
-                    ws = np.array([rep_rng.choice(10, p=ps[i]) for i in range(T)], dtype=int)
-                    yobs = ys[np.arange(T), ws]
+                tasks.append(
+                    {
+                        "task_id": f"tree_s{scenario}_T{T}_d{decay_label}",
+                        "cfg": asdict(cfg),
+                        "seed": seed,
+                        "scenario": scenario,
+                        "T": T,
+                        "decay": decay,
+                        "decay_label": decay_label,
+                    }
+                )
 
-                    greedy = PL_greedy(xs, yobs, ws, ps, depth=5)
-                    _, _, rw_greedy = eval_ptree(greedy, eval_data)
-                    rows.append({"experiment": "tree", "scenario": scenario, "T": T, "decay": decay_label, "rep": rep, "method": "greedy", "beta": 0.0, "value": rw_greedy})
-                    lin_model = fit_linear_pevi(xs, yobs, ws, arm_count=10)
-                    for beta in beta_list:
-                        tree, _ = PL_pessimism(xs, yobs, ws, ps, beta=beta, depth=5)
-                        _, _, value = eval_ptree(tree, eval_data)
-                        rows.append({"experiment": "tree", "scenario": scenario, "T": T, "decay": decay_label, "rep": rep, "method": "pess", "beta": beta, "value": value})
-                        _, _, lin_value = eval_linear_pevi(lin_model, eval_data, beta=beta)
-                        rows.append({"experiment": "tree", "scenario": scenario, "T": T, "decay": decay_label, "rep": rep, "method": "lin", "beta": beta, "value": lin_value})
-
-    df = pd.DataFrame(rows)
-    df.to_csv(outdir / "data" / "contextual_nonadaptive_results.csv", index=False)
+    df = _run_chunked(
+        tasks,
+        _run_contextual_task,
+        outdir / "data" / "chunks" / "contextual_nonadaptive",
+        outdir / "data" / "contextual_nonadaptive_results.csv",
+        jobs=jobs,
+        resume=resume,
+    )
     plot_value_grid(df, outdir / "figures" / "figure5_contextual_nonadaptive.png", row="scenario", col="decay")
     return df
 
@@ -377,69 +453,102 @@ def _dgp_for_ts(setting: int):
     return MultiQuad(2, 10, sigma=0.1), MultiQuad(2, 10, sigma=0)
 
 
-def run_ts_synthetic(mode: str, seed: int = 0, cv_only: bool = False) -> pd.DataFrame:
-    cfg = mode_config(mode)
-    outdir = outdir_for(mode)
-    rng = np.random.default_rng(seed)
+def _run_ts_task(task: dict) -> pd.DataFrame:
+    cfg = ModeConfig(**task["cfg"])
+    seed = int(task["seed"])
+    setting = int(task["setting"])
+    T = int(task["T"])
+    batch_size = int(task["batch_size"])
+    floor_label = task["floor_label"]
+    floor_decay = task["floor_decay"]
+    cv_only = bool(task["cv_only"])
     beta_default = [0.1, 0.2, 0.5, 1, 5, 10]
     beta_miss = [0.001, 0.01, 0.1, 0.2, 0.5, 1, 5, 10]
-    t_list = [1000, 2000, 3000, 4000, 5000] if mode == "full" else [300, 600]
-    floor_settings = [("pure", None), ("0.2", 0.2), ("0.5", 0.5), ("0.8", 0.8)]
+    dgp, dgp_eval = _dgp_for_ts(setting)
+    eval_data = dgp_eval.sample_data(cfg.t_eval, seed=_stable_seed(seed, "ts_eval", setting, T, batch_size, floor_label, cv_only))
+    beta_list = beta_miss if setting == 3 else beta_default
     rows = []
 
+    for rep in range(cfg.ts_nrep):
+        rep_seed = _stable_seed(seed, "ts", setting, T, batch_size, floor_label, cv_only, rep)
+        data = dgp.sample_data(T, seed=rep_seed)
+        batch_sizes = [min(100, T)] + [batch_size] * int((T - min(100, T)) / batch_size)
+        np.random.seed(rep_seed + 23)
+        if setting == 2:
+            logged = run_experiment_opt(
+                data["xs"],
+                data["ys"],
+                "TS",
+                dgp,
+                batch_sizes=batch_sizes,
+                num_mc=cfg.num_mc,
+                if_floor=floor_decay is not None,
+                floor_decay=floor_decay,
+            )
+        else:
+            logged = run_experiment(
+                data["xs"],
+                data["ys"],
+                "TS",
+                dgp,
+                batch_sizes=batch_sizes,
+                num_mc=cfg.num_mc,
+                if_floor=floor_decay is not None,
+                floor_decay=floor_decay,
+            )
+        xs, yobs, ws, ps = logged["xs"], logged["yobs"], logged["ws"], logged["ps"]
+        greedy = PL_greedy(xs, yobs, ws, ps, depth=5)
+        _, _, rw_greedy = eval_ptree(greedy, eval_data)
+        experiment = "ts_cv" if cv_only else "ts"
+        rows.append({"experiment": experiment, "setting": setting, "T": T, "batch_size": batch_size, "floor": floor_label, "rep": rep, "method": "greedy", "beta": 0.0, "value": rw_greedy})
+        if cv_only:
+            beta_cv, _, _, _ = PPL_CV(xs, yobs, ws, ps, beta_list=beta_default, Nfold=5, depth=5)
+            tree, _ = PL_pessimism(xs, yobs, ws, ps, beta=beta_cv, depth=5)
+            _, _, value = eval_ptree(tree, eval_data)
+            rows.append({"experiment": "ts_cv", "setting": setting, "T": T, "batch_size": batch_size, "floor": floor_label, "rep": rep, "method": "CV_pess", "beta": beta_cv, "value": value})
+        else:
+            for beta in beta_list:
+                tree, _ = PL_pessimism(xs, yobs, ws, ps, beta=beta, depth=5)
+                _, _, value = eval_ptree(tree, eval_data)
+                rows.append({"experiment": "ts", "setting": setting, "T": T, "batch_size": batch_size, "floor": floor_label, "rep": rep, "method": "pess", "beta": beta, "value": value})
+    return pd.DataFrame(rows)
+
+
+def run_ts_synthetic(mode: str, seed: int = 0, cv_only: bool = False, jobs: int = 1, resume: bool = False) -> pd.DataFrame:
+    cfg = mode_config(mode)
+    outdir = outdir_for(mode)
+    t_list = [1000, 2000, 3000, 4000, 5000] if mode == "full" else [300, 600]
+    floor_settings = [("pure", None), ("0.2", 0.2), ("0.5", 0.5), ("0.8", 0.8)]
+    tasks = []
     settings = [2] if cv_only else [1, 2, 3]
     for setting in settings:
         for T in t_list:
             for batch_size in ([10] if cv_only else [10, 100]):
                 for floor_label, floor_decay in floor_settings:
-                    dgp, dgp_eval = _dgp_for_ts(setting)
-                    eval_data = dgp_eval.sample_data(cfg.t_eval, seed=seed + setting + T)
-                    beta_list = beta_miss if setting == 3 else beta_default
-                    for rep in range(cfg.ts_nrep):
-                        rep_seed = int(rng.integers(0, 2**31 - 1))
-                        data = dgp.sample_data(T, seed=rep_seed)
-                        batch_sizes = [min(100, T)] + [batch_size] * int((T - min(100, T)) / batch_size)
-                        np.random.seed(rep_seed + 23)
-                        if setting == 2:
-                            logged = run_experiment_opt(
-                                data["xs"],
-                                data["ys"],
-                                "TS",
-                                dgp,
-                                batch_sizes=batch_sizes,
-                                num_mc=cfg.num_mc,
-                                if_floor=floor_decay is not None,
-                                floor_decay=floor_decay,
-                            )
-                        else:
-                            logged = run_experiment(
-                                data["xs"],
-                                data["ys"],
-                                "TS",
-                                dgp,
-                                batch_sizes=batch_sizes,
-                                num_mc=cfg.num_mc,
-                                if_floor=floor_decay is not None,
-                                floor_decay=floor_decay,
-                            )
-                        xs, yobs, ws, ps = logged["xs"], logged["yobs"], logged["ws"], logged["ps"]
-                        greedy = PL_greedy(xs, yobs, ws, ps, depth=5)
-                        _, _, rw_greedy = eval_ptree(greedy, eval_data)
-                        rows.append({"experiment": "ts", "setting": setting, "T": T, "batch_size": batch_size, "floor": floor_label, "rep": rep, "method": "greedy", "beta": 0.0, "value": rw_greedy})
-                        if cv_only:
-                            beta_cv, _, _, _ = PPL_CV(xs, yobs, ws, ps, beta_list=beta_default, Nfold=5, depth=5)
-                            tree, _ = PL_pessimism(xs, yobs, ws, ps, beta=beta_cv, depth=5)
-                            _, _, value = eval_ptree(tree, eval_data)
-                            rows.append({"experiment": "ts_cv", "setting": setting, "T": T, "batch_size": batch_size, "floor": floor_label, "rep": rep, "method": "CV_pess", "beta": beta_cv, "value": value})
-                        else:
-                            for beta in beta_list:
-                                tree, _ = PL_pessimism(xs, yobs, ws, ps, beta=beta, depth=5)
-                                _, _, value = eval_ptree(tree, eval_data)
-                                rows.append({"experiment": "ts", "setting": setting, "T": T, "batch_size": batch_size, "floor": floor_label, "rep": rep, "method": "pess", "beta": beta, "value": value})
+                    prefix = "tscv" if cv_only else "ts"
+                    tasks.append(
+                        {
+                            "task_id": f"{prefix}_s{setting}_T{T}_b{batch_size}_f{floor_label}",
+                            "cfg": asdict(cfg),
+                            "seed": seed,
+                            "setting": setting,
+                            "T": T,
+                            "batch_size": batch_size,
+                            "floor_label": floor_label,
+                            "floor_decay": floor_decay,
+                            "cv_only": cv_only,
+                        }
+                    )
 
-    df = pd.DataFrame(rows)
     name = "ts_cv_results.csv" if cv_only else "ts_synthetic_results.csv"
-    df.to_csv(outdir / "data" / name, index=False)
+    df = _run_chunked(
+        tasks,
+        _run_ts_task,
+        outdir / "data" / "chunks" / ("ts_cv" if cv_only else "ts_synthetic"),
+        outdir / "data" / name,
+        jobs=jobs,
+        resume=resume,
+    )
     if cv_only:
         plot_value_grid(df, outdir / "figures" / "figure9_ts_cv.png", row="floor", col="batch_size")
     else:
@@ -458,9 +567,7 @@ def _load_openml_dataset(name: str):
     return dataset.get_data(dataset_format="dataframe", target=dataset.default_target_attribute)
 
 
-def run_real(mode: str, seed: int = 0) -> pd.DataFrame:
-    cfg = mode_config(mode)
-    outdir = outdir_for(mode)
+def _real_grid(mode: str):
     if mode == "full":
         beta_list = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15]
         settings = [("pure", None), ("0.8", 0.8), ("0.5", 0.5), ("0.2", 0.2)]
@@ -475,75 +582,115 @@ def run_real(mode: str, seed: int = 0) -> pd.DataFrame:
         batch_values = [10]
         max_train = 600
         max_eval = 600
+    return beta_list, settings, datasets, batch_values, max_train, max_eval
+
+
+def _run_real_dataset_task(task: dict) -> pd.DataFrame:
+    cfg = ModeConfig(**task["cfg"])
+    mode = task["mode"]
+    seed = int(task["seed"])
+    data_idx = int(task["dataset_index"])
+    name = task["dataset"]
+    beta_list, settings, _, batch_values, max_train, max_eval = _real_grid(mode)
     rows = []
-    skipped = []
 
-    for data_idx, name in enumerate(datasets):
-        X, y, _, _ = _load_openml_dataset(name)
-        for rep in range(cfg.real_nrep):
-            try:
-                bandit, _ = generate_bandit_data(
-                    X,
-                    y,
-                    noise_std=0.1,
-                    seed=seed + 1000 * rep + data_idx,
-                    max_arms=50,
+    X, y, _, _ = _load_openml_dataset(name)
+    for rep in range(cfg.real_nrep):
+        try:
+            bandit, _ = generate_bandit_data(
+                X,
+                y,
+                noise_std=0.1,
+                seed=seed + 1000 * rep + data_idx,
+                max_arms=50,
+            )
+        except ValueError as exc:
+            rows.append({"experiment": "real_skipped", "dataset_index": data_idx, "dataset": name, "reason": str(exc)})
+            continue
+
+        eval_limit = bandit["T_test"] if max_eval is None else min(max_eval, bandit["T_test"])
+        train_limit = bandit["T"] if max_train is None else min(max_train, bandit["T"])
+        eval_data = {
+            "xs": bandit["xs_test"][:eval_limit],
+            "ys": bandit["muxs_test"][:eval_limit],
+            "muxs": bandit["muxs_test"][:eval_limit],
+        }
+        for batch_size in batch_values:
+            explore = int(min(100, max(1, train_limit // 50)))
+            usable = explore + batch_size * int((train_limit - explore) / batch_size)
+            batch_sizes = [explore] + [batch_size] * int((usable - explore) / batch_size)
+            for floor_label, floor_decay in settings:
+                np.random.seed(_stable_seed(seed, "real", data_idx, batch_size, floor_label, rep))
+                logged = run_experiment(
+                    bandit["xs"][:usable],
+                    bandit["ys"][:usable],
+                    "TS",
+                    None,
+                    batch_sizes=batch_sizes,
+                    num_mc=cfg.num_mc,
+                    if_floor=floor_decay is not None,
+                    floor_decay=floor_decay,
                 )
-            except ValueError as exc:
-                skipped.append({"dataset_index": data_idx, "dataset": name, "reason": str(exc)})
-                continue
-            eval_limit = bandit["T_test"] if max_eval is None else min(max_eval, bandit["T_test"])
-            train_limit = bandit["T"] if max_train is None else min(max_train, bandit["T"])
-            eval_data = {
-                "xs": bandit["xs_test"][:eval_limit],
-                "ys": bandit["muxs_test"][:eval_limit],
-                "muxs": bandit["muxs_test"][:eval_limit],
-            }
-            for batch_size in batch_values:
-                explore = int(min(100, max(1, train_limit // 50)))
-                usable = explore + batch_size * int((train_limit - explore) / batch_size)
-                batch_sizes = [explore] + [batch_size] * int((usable - explore) / batch_size)
-                for floor_label, floor_decay in settings:
-                    np.random.seed(seed + 5000 * data_idx + 100 * batch_size + rep)
-                    logged = run_experiment(
-                        bandit["xs"][:usable],
-                        bandit["ys"][:usable],
-                        "TS",
-                        None,
-                        batch_sizes=batch_sizes,
-                        num_mc=cfg.num_mc,
-                        if_floor=floor_decay is not None,
-                        floor_decay=floor_decay,
-                    )
-                    xs, yobs, ws, ps = logged["xs"], logged["yobs"], logged["ws"], logged["ps"]
-                    greedy = PL_greedy(xs, yobs, ws, ps, depth=5)
-                    _, _, rw_greedy = eval_ptree(greedy, eval_data)
-                    beta_cv, _, _, _ = PPL_CV(xs, yobs, ws, ps, beta_list=beta_list, Nfold=5, depth=5)
-                    tree, _ = PL_pessimism(xs, yobs, ws, ps, beta=beta_cv, depth=5)
-                    _, _, rw_pess = eval_ptree(tree, eval_data)
-                    rows.append(
-                        {
-                            "experiment": "real",
-                            "dataset_index": data_idx,
-                            "dataset": name,
-                            "batch_size": batch_size,
-                            "floor": floor_label,
-                            "rep": rep,
-                            "greedy_value": rw_greedy,
-                            "pess_value": rw_pess,
-                            "improvement": rw_pess - rw_greedy,
-                            "beta_cv": beta_cv,
-                            "T_train": usable,
-                            "T_eval": eval_limit,
-                            "K": bandit["K"],
-                            "p": bandit["p"],
-                        }
-                    )
+                xs, yobs, ws, ps = logged["xs"], logged["yobs"], logged["ws"], logged["ps"]
+                greedy = PL_greedy(xs, yobs, ws, ps, depth=5)
+                _, _, rw_greedy = eval_ptree(greedy, eval_data)
+                beta_cv, _, _, _ = PPL_CV(xs, yobs, ws, ps, beta_list=beta_list, Nfold=5, depth=5)
+                tree, _ = PL_pessimism(xs, yobs, ws, ps, beta=beta_cv, depth=5)
+                _, _, rw_pess = eval_ptree(tree, eval_data)
+                rows.append(
+                    {
+                        "experiment": "real",
+                        "dataset_index": data_idx,
+                        "dataset": name,
+                        "batch_size": batch_size,
+                        "floor": floor_label,
+                        "rep": rep,
+                        "greedy_value": rw_greedy,
+                        "pess_value": rw_pess,
+                        "improvement": rw_pess - rw_greedy,
+                        "beta_cv": beta_cv,
+                        "T_train": usable,
+                        "T_eval": eval_limit,
+                        "K": bandit["K"],
+                        "p": bandit["p"],
+                    }
+                )
+    return pd.DataFrame(rows)
 
-    df = pd.DataFrame(rows)
+
+def run_real(mode: str, seed: int = 0, jobs: int = 1, resume: bool = False) -> pd.DataFrame:
+    cfg = mode_config(mode)
+    outdir = outdir_for(mode)
+    _, _, datasets, _, _, _ = _real_grid(mode)
+    tasks = [
+        {
+            "task_id": f"real_d{idx}_{name.replace('/', '_')}",
+            "cfg": asdict(cfg),
+            "mode": mode,
+            "seed": seed,
+            "dataset_index": idx,
+            "dataset": name,
+        }
+        for idx, name in enumerate(datasets)
+    ]
+
+    combined = _run_chunked(
+        tasks,
+        _run_real_dataset_task,
+        outdir / "data" / "chunks" / "real",
+        None,
+        jobs=jobs,
+        resume=resume,
+    )
+    if combined.empty:
+        df = pd.DataFrame()
+        skipped = pd.DataFrame()
+    else:
+        df = combined[combined["experiment"] == "real"].copy()
+        skipped = combined[combined["experiment"] == "real_skipped"].copy()
     df.to_csv(outdir / "data" / "real_results.csv", index=False)
-    if skipped:
-        pd.DataFrame(skipped).drop_duplicates().to_csv(outdir / "data" / "real_skipped.csv", index=False)
+    if not skipped.empty:
+        skipped.drop_duplicates().to_csv(outdir / "data" / "real_skipped.csv", index=False)
     plot_real(df, outdir)
     return df
 
@@ -631,22 +778,37 @@ def main():
     parser.add_argument("--mode", choices=["quick", "full"], default="quick")
     parser.add_argument("--experiment", choices=["mab", "tree", "ts", "ts-cv", "real", "all"], default="mab")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--jobs", type=int, default=1, help="Number of worker processes for tree/TS/real chunked experiments.")
+    parser.add_argument("--resume", action="store_true", help="Reuse completed chunk CSVs and only run missing chunks.")
     args = parser.parse_args()
 
     outdir = outdir_for(args.mode)
     start = time.time()
-    (outdir / "run_config.json").write_text(json.dumps({"mode": args.mode, "experiment": args.experiment, "seed": args.seed, "config": asdict(mode_config(args.mode))}, indent=2), encoding="utf-8")
+    (outdir / "run_config.json").write_text(
+        json.dumps(
+            {
+                "mode": args.mode,
+                "experiment": args.experiment,
+                "seed": args.seed,
+                "jobs": args.jobs,
+                "resume": args.resume,
+                "config": asdict(mode_config(args.mode)),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     if args.experiment in {"mab", "all"}:
         run_mab(args.mode, seed=args.seed)
     if args.experiment in {"tree", "all"}:
-        run_contextual_nonadaptive(args.mode, seed=args.seed)
+        run_contextual_nonadaptive(args.mode, seed=args.seed, jobs=args.jobs, resume=args.resume)
     if args.experiment in {"ts", "all"}:
-        run_ts_synthetic(args.mode, seed=args.seed)
+        run_ts_synthetic(args.mode, seed=args.seed, jobs=args.jobs, resume=args.resume)
     if args.experiment in {"ts-cv", "all"}:
-        run_ts_synthetic(args.mode, seed=args.seed, cv_only=True)
+        run_ts_synthetic(args.mode, seed=args.seed, cv_only=True, jobs=args.jobs, resume=args.resume)
     if args.experiment in {"real", "all"}:
-        run_real(args.mode, seed=args.seed)
+        run_real(args.mode, seed=args.seed, jobs=args.jobs, resume=args.resume)
 
     report = summarize(outdir)
     print(f"wrote {report}")
