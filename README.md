@@ -2,7 +2,9 @@
 <p> Reproduction code for Pessimistic Policy Learning
 </h1> 
 
-This repository contains code for reproducing results in the paper [Policy learning "without" overlap: Pessimism and generalized empirical Bernstein's inequality](https://arxiv.org/abs/2212.09900).
+This repository is being used as an attempted reproduction workspace for the paper [Policy learning "without" overlap: Pessimism and generalized empirical Bernstein's inequality](https://arxiv.org/abs/2212.09900).
+
+The current goal is to document what can be reproduced, what environment and data are required, and where the checked code differs from the paper.
 
 
 ### Usage 
