@@ -8,7 +8,26 @@ The current goal is to document what can be reproduced, what environment and dat
 
 
 ### Usage 
-First, running `install.sh` installs necessary packages for the experiments, which executes `setup.py`.
+The original `install.sh` is not sufficient on this checkout because `setup.py` expects a missing `LICENSE` file and recent `rpy2` releases are incompatible with the current `numpy2ri.activate()` call in `algs/ptree.py`.
+
+The working local reproduction environment is captured in `environment.yml`:
+
+```bash
+conda env create -f environment.yml
+conda activate pess-pl-legacy
+```
+
+On Windows, set these environment variables after activation so Python can find the local repository and R installation:
+
+```powershell
+conda env config vars set R_HOME="$env:CONDA_PREFIX\Lib\R" PYTHONPATH="$PWD"
+conda deactivate
+conda activate pess-pl-legacy
+```
+
+This environment has been smoke-tested with Python dependencies, R `policytree`/`grf`, `algs.ptree`, `algs.pess`, and a small policy-tree call.
+
+OpenML datasets used by `experiments/real.py` have been downloaded to a local cache at `data/openml/`. The cache itself is git-ignored; `notes/openml_cache_manifest.csv` records the dataset names, OpenML IDs, targets, and shapes. The script currently lists 32 datasets, although the paper reports 33 real datasets.
 
 
 Folder `experiments` contains scripts for reproducing the experiments:

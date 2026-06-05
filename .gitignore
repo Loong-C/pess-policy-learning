@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+
+data/openml/
+results/
+tmp/
+
+.ipynb_checkpoints/

@@ -1,0 +1,22 @@
+name: pess-pl-legacy
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - autograd
+  - statsmodels
+  - matplotlib
+  - seaborn
+  - openml
+  - rpy2=3.4.5
+  - r-base=4.1
+  - r-policytree
+  - r-grf
+  - r-bh
+  - dill
+  - zipp
+  - ipykernel
