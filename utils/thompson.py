@@ -1,108 +1,102 @@
-import numpy as np 
-import pandas as pd
-from utils.dgp import MultiQuad
+from __future__ import annotations
+
+import numpy as np
+from sklearn.linear_model import Ridge
+
 from utils.compute import apply_floor
-from sklearn.linear_model import RidgeCV
+
 
 class LinTS:
+    """Linear Thompson Sampling with Monte Carlo propensity estimates."""
 
-    '''
-    Implement the linear TS algorithm 
-    K: number of arms 
-    p: feature dimension 
-    floor_start: K-dimensional vector for lower bounded exploration floor_start * t^{-floor_dacay}
-    floor_decay: K-dimensional vector for lower bounded exploration, can be None for no bounds
-    num_mc: number of Monte Carlo samples
-    DGP: data generating object
-    '''
-
-    def __init__(self, K, p, DGP, num_mc = 100, 
-                 if_floor = False, floor_start = None, floor_decay = None):
-        self.num_mc = num_mc
-        self.K = K
-        self.p = p
-        self.floor_start = None
-        self.floor_decay = None 
-        self.mu = [np.zeros((p+1))] * K # sample mean 
-        self.V = [np.zeros((p+1, p+1))] * K # sample covariance
-        self.X = [[] for _ in range(K)] # observed features
-        self.y = [[] for _ in range(K)] # observed outcomes 
-        self.A = []
+    def __init__(self, K, p, DGP=None, num_mc=1000, prior_scale=10.0):
+        self.K = int(K)
+        self.p = int(p)
+        self.num_mc = int(num_mc)
         self.DGP = DGP
+        self.prior_scale = float(prior_scale)
+        self.mu = [np.zeros(self.p + 1, dtype=float) for _ in range(self.K)]
+        self.V = [np.eye(self.p + 1, dtype=float) * self.prior_scale for _ in range(self.K)]
+        self.X = [[] for _ in range(self.K)]
+        self.y = [[] for _ in range(self.K)]
         self.ps = None
-        self.if_floor = if_floor
-        self.ws = None 
-        if if_floor:
-            self.floor_start = floor_start
-            self.floor_decay = floor_decay
-    
+        self.ws = None
+        self.if_floor = False
+        self.floor_decay = None
+        self.floor_total = None
+
     def initialize_ps(self, T):
-        self.ps = np.empty((T, self.K))
-    
+        self.ps = np.zeros((int(T), self.K), dtype=float)
+
     def initialize_w(self, T):
-        self.ws = np.empty(T)
-    
-    def set_floor(self, if_floor, floor_start, floor_decay):
-        self.if_floor = if_floor
-        self.floor_start = floor_start
+        self.ws = np.zeros(int(T), dtype=int)
+
+    def set_floor(self, if_floor=False, floor_start=None, floor_decay=None, floor_total=None):
+        self.if_floor = bool(if_floor)
         self.floor_decay = floor_decay
-         
-    def _update_TS(self, x, y, k):
-        self.X[k].extend(x)
-        # print(len(self.X[k]))
-        self.y[k].extend(y)
-        # print(len(self.y[k]))
-        regr = RidgeCV(alphas=[1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1.0]).fit(self.X[k], self.y[k])
-        yhat = regr.predict(self.X[k]) 
-        self.mu[k] = [regr.intercept_, *list(regr.coef_)]
-        # print(self.mu[k])
-        X = np.concatenate([np.ones((len(self.X[k]), 1)), self.X[k]], axis=1) 
-        B = np.matmul(X.T, X) + regr.alpha_ * np.eye(self.p+1) 
-        self.V[k] = np.mean((self.y[k] - yhat) ** 2) * np.linalg.inv(B) 
+        self.floor_total = floor_total
 
-    # === update TS parameters based on new observations
-    # xss: features for the new observations
-    # wss: actions for the new obs
-    # yss: rewards for the new obs
+    def _feature_with_intercept(self, x):
+        x = np.asarray(x, dtype=float)
+        return np.column_stack([np.ones(x.shape[0]), x])
+
+    def _update_arm(self, x, y, arm):
+        if len(x) == 0:
+            return
+        self.X[arm].extend(np.asarray(x, dtype=float).tolist())
+        self.y[arm].extend(np.asarray(y, dtype=float).tolist())
+        X_arm = np.asarray(self.X[arm], dtype=float)
+        y_arm = np.asarray(self.y[arm], dtype=float)
+
+        if len(y_arm) < 2:
+            self.mu[arm] = np.r_[float(np.mean(y_arm)), np.zeros(self.p)]
+            self.V[arm] = np.eye(self.p + 1) * self.prior_scale
+            return
+
+        model = Ridge(alpha=1.0, fit_intercept=True).fit(X_arm, y_arm)
+        self.mu[arm] = np.r_[model.intercept_, model.coef_]
+        X_design = self._feature_with_intercept(X_arm)
+        residual = y_arm - model.predict(X_arm)
+        sigma2 = float(np.var(residual)) if len(residual) > 1 else 1.0
+        gram = X_design.T @ X_design + np.eye(self.p + 1)
+        self.V[arm] = sigma2 * np.linalg.pinv(gram) + 1e-8 * np.eye(self.p + 1)
+
     def update_TS(self, xss, wss, yss):
-        for k in range(self.K):
-            # print("k:"+str(k)+", x:"+str(xss[wss==k].shape))
-            self._update_TS(xss[wss==k], yss[wss==k], k)
+        wss = np.asarray(wss, dtype=int)
+        for arm in range(self.K):
+            idx = wss == arm
+            self._update_arm(np.asarray(xss)[idx], np.asarray(yss)[idx], arm)
 
-    # add_floor is T*K matrix of additional floor 
-    def draw_TS_one_batch(self, xs, start, end, current_t, add_floor = None): 
-        T, p = xs.shape 
-        xt = np.concatenate([np.ones((T, 1)), xs], axis=1) 
+    def _floor_vector(self, current_T, add_floor=None, row=None):
+        floor = np.zeros(self.K, dtype=float)
+        if self.if_floor and self.floor_decay is not None:
+            total = float(self.floor_total if self.floor_total is not None else current_T)
+            floor[:] = total ** (-float(self.floor_decay)) / self.K
+        if add_floor is not None and row is not None:
+            floor = np.maximum(floor, np.asarray(add_floor[row], dtype=float))
+        return floor
 
-        # initialize propensity score matrix
+    def draw_TS_one_batch(self, xs, start, end, current_t=None, add_floor=None):
+        xs = np.asarray(xs, dtype=float)
         if self.ps is None:
-            self.ps = np.empty((T, self.K))
+            self.initialize_ps(xs.shape[0])
+        if self.ws is None:
+            self.initialize_w(xs.shape[0])
 
-        # Thompson sampling
-        coeff = np.empty((self.K, self.num_mc, self.p+1))
-        for k in range(self.K):
-            coeff[k] = np.random.multivariate_normal(self.mu[k], self.V[k], size = self.num_mc) 
-        draws = np.matmul(coeff, xt.T)  
-        for s in np.arange(start, end):
-            self.ps[s, :] = np.bincount(np.argmax(draws[:, :, s], axis = 0), minlength = self.K) / self.num_mc
-            print(self.ps[s, :])
-            # if specified to apply floor, compute sampling floors  
-            if add_floor is not None:
-                if self.if_floor:
-                    psmin = np.maximum(self.floor_start / current_t ** self.floor_decay, add_floor[s,:])
-                    self.ps[s, :] = apply_floor(self.ps[s, :], psmin) 
-                else:
-                    self.ps[s, :] = apply_floor(self.ps[s, :], add_floor[s,:])  
-            else:
-                if self.if_floor:
-                    psmin = self.floor_start / current_t ** self.floor_decay 
-                    self.ps[s, :] = apply_floor(self.ps[s, :], psmin)
-            
-        w = [np.random.choice(self.K, p = self.ps[t]) for t in range(start, end)]
-        self.ws[range(start,end)] = w 
-            
-        return w, self.ps
- 
-        
+        x_design = self._feature_with_intercept(xs)
+        coeff = np.empty((self.K, self.num_mc, self.p + 1), dtype=float)
+        for arm in range(self.K):
+            cov = (self.V[arm] + self.V[arm].T) / 2.0
+            coeff[arm] = np.random.multivariate_normal(self.mu[arm], cov, size=self.num_mc)
+        draws = np.matmul(coeff, x_design.T)
 
+        for row in range(int(start), int(end)):
+            raw = np.bincount(np.argmax(draws[:, :, row], axis=0), minlength=self.K) / self.num_mc
+            floor = self._floor_vector(xs.shape[0], add_floor=add_floor, row=row)
+            self.ps[row, :] = apply_floor(raw, floor) if np.any(floor > 0) else raw
+            if self.ps[row, :].sum() <= 0:
+                self.ps[row, :] = np.ones(self.K) / self.K
 
+        sampled = [np.random.choice(self.K, p=self.ps[row]) for row in range(int(start), int(end))]
+        self.ws[np.arange(int(start), int(end))] = sampled
+        return sampled, self.ps

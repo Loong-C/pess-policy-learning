@@ -56,3 +56,46 @@ Data:
 Repository hygiene:
 - Added `.gitignore` entries for Python caches, `tmp/`, `results/`, and `data/openml/` so generated runtime data is not accidentally committed.
 - Added `environment.yml` for the working legacy conda environment.
+
+## 2026-06-05 21:48:18 +08:00
+
+Scope: repaired the code and experiment entry points toward a faithful Section 6-7 reproduction, then ran reproducibility checks and generated result artifacts.
+
+Code repairs:
+- Reimplemented `algs/pess.py` around the paper's Algorithm 1 MM update: greedy initialization, `Vs`/`Vp`, additive `Gamma_s` and `Gamma_p` penalties, exact prediction-based convergence, and Algorithm 2 style CV over consecutive folds.
+- Updated `algs/ptree.py` to use local rpy2 conversion instead of deprecated global `numpy2ri.activate()`, and fixed logged-data empirical evaluation to score the selected arm.
+- Corrected synthetic DGP formulas in `utils/dgp.py` for `MultiQuad` and `MultiLinear` to match Section 7.
+- Cleaned `utils/thompson.py`, `utils/experiment.py`, and `utils/compute.py` so TS collection, propensity floors, and experiment outputs are deterministic and explicit.
+- Added package `__init__.py` files and fixed `setup.py`/`environment.yml` so editable installation includes `algs`, `utils`, and `experiments`.
+- Replaced old broken experiment scripts with compatibility wrappers that delegate to `experiments/reproduce.py`.
+- Added `experiments/reproduce.py` as the maintained CLI for MAB, contextual non-adaptive experiments, TS synthetic experiments, TS CV, and real-data experiments.
+
+Paper checks:
+- Re-read Section 6 Algorithm 1/2 and Section 7 experiment descriptions.
+- Also checked the Section 7.1.2 linear PEVI description and implemented the action-block linear baseline.
+- Confirmed the real-data experiment uses 33 OpenML datasets; added the missing `skin-segmentation` dataset.
+
+Environment and data:
+- Re-ran `python -m pip install -e .` in `pess-pl-legacy`; editable install succeeded.
+- Regenerated `notes/openml_cache_manifest.csv` with 33/33 OpenML datasets successfully cached under `data/openml/`.
+- Added `tabulate` for stable Markdown tables.
+
+Runs completed:
+- `python experiments/reproduce.py --mode quick --experiment mab --seed 20260605`
+- `python experiments/reproduce.py --mode quick --experiment tree --seed 20260605`
+- `python experiments/reproduce.py --mode quick --experiment ts --seed 20260605`
+- `python experiments/reproduce.py --mode quick --experiment ts-cv --seed 20260605`
+- `python experiments/reproduce.py --mode quick --experiment real --seed 20260605`
+- `python experiments/reproduce.py --mode full --experiment mab --seed 20260605`
+
+Artifacts:
+- Quick all-chain CSVs, figures, and automatic report were written under `artifacts/reproduction/quick/`.
+- Full MAB CSVs, figures, and automatic report were written under `artifacts/reproduction/full/`.
+- A manually summarized Chinese report was written to `artifacts/reproduction/reproduction_report_zh.md`.
+
+Results and caveats:
+- Full MAB matches the paper setup with N=1000. PPL improves over GPL most clearly at small T in the optimal and suboptimal overlap settings; at T=20000 the advantage is small and not statistically significant in this run.
+- Quick contextual and TS experiments verify that the full code path runs and show the expected direction: PPL usually improves over GPL, while linear PEVI is more stable in worst-overlap quick setting.
+- Quick real-data run uses a deliberately small `cmc` subset and is not statistically conclusive (`PPL - GPL` mean improvement about 0.0058, one-sided p about 0.25).
+- Full Figure 5-10 grids were not completed in this interaction. A real-data run using a larger quick subset exceeded 20 minutes and left no CSV before timeout, so quick real was narrowed to a smoke subset. Full mode remains configured for the paper-scale commands, but running it will require substantially more wall-clock time.
+- Current OpenML metadata for `houses` has 3842 unique target values (`median_house_value`), which conflicts with the paper's classification-to-bandit assumption. Added a max-arm guard in the real-data transform and a `real_skipped.csv` path for such cases.

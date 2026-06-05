@@ -1,371 +1,215 @@
-from algs.ptree import *
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Iterable, List, Sequence
+
+import numpy as np
+
+from algs.ptree import (
+    PL_aipw_score,
+    PL_greedy,
+    emp_eval_ptree,
+    fit_policy_tree,
+    predict_ptree,
+)
 
 
+@dataclass
+class CVResult:
+    beta: float
+    beta_1se: float
+    beta_lcb: float
+    scores: List[List[float]]
+    avg_scores: List[float]
 
 
-""" compute sample variance """
-### == inputs:
-# xxs is the T*p covariate matrix
-# yobs is the T*1 observed outcomes 
-# wws is the T*1 observed actions A_t
-# what is the T*1 predicted actions from a policy
-# exs is the T*K matrix for e_t(x_t,a) for a=1,..,K
-# muxs (optional) is the T*K matrix for hat{mu}(x_t,a) for a=1,..,K
-### == outputs:
-# three variance terms
+def _selected(score_mat: np.ndarray, actions: np.ndarray) -> np.ndarray:
+    return score_mat[np.arange(score_mat.shape[0]), np.asarray(actions, dtype=int)]
 
-def compute_V(xxs, yobs, wws, what, exs, lower_bound = 0.001):
-    T, K = exs.shape
-      
-    # compute three terms in uncertainty quanfier
-    Vs_items = np.zeros((T,K))
-    Vp_items = np.zeros((T,K))
-    Vh_items = np.zeros((T,K))
-    for k in range(K):
-        Vs_items[(what == k) & (wws == k), k] = 1 / exs[(what == k) & (wws == k), k]**2
-        Vp_items[what==k, k] = 1 / np.maximum(lower_bound, exs[what == k, k])
-        Vh_items[what==k, k] = 1 / np.maximum(lower_bound, exs[what == k, k])**3
-     
-    Vs = np.sqrt(np.sum(Vs_items)) / T
-    Vp = np.sqrt(np.sum(Vp_items)) / T
-    Vh = np.power(np.sum(Vh_items), 1/4) / T
-    
-    res = dict(Vs_items = Vs_items,
-               Vp_items = Vp_items,
-               Vh_items = Vh_items,
-               Vs = Vs, Vp = Vp, Vh = Vh,
-               maxV = np.max((Vs, Vp, Vh)))
-    
-    return res
 
-""" compute majorized upper bound for the variance term """
-### == inputs:
-# xxs is the T*p covariate matrix
-# yobs is the T*1 observed outcomes 
-# wws is the T*1 observed actions A_t
-# what_0 is the T*1 predicted actions from a baseline policy pi_0
-# exs is the T*K matrix for e_t(x_t,a) for a=1,..,K
-# muxs (optional) is the T*K matrix for hat{mu}(x_t,a) for a=1,..,K
-### == outputs:
-# T*K matrix of augment score G(w,w0) that upper bounds the variance term 
-def compute_Gamma_upp(xxs, yobs, wws, what_0, exs, 
-                      lower_bound = 0.001, muxs = None):
-    T, K = exs.shape
-     
+def compute_variance_terms(wws, policy_actions, exs, min_propensity: float = 1e-12):
+    """Compute the Vs and Vp terms used in Algorithm 1."""
+    exs = np.asarray(exs, dtype=float)
+    wws = np.asarray(wws, dtype=int).reshape(-1)
+    policy_actions = np.asarray(policy_actions, dtype=int).reshape(-1)
+    clipped_exs = np.clip(exs, min_propensity, None)
+
+    match = wws == policy_actions
+    chosen_exs = clipped_exs[np.arange(exs.shape[0]), policy_actions]
+    vs_items = np.zeros(exs.shape[0], dtype=float)
+    vs_items[match] = 1.0 / chosen_exs[match] ** 2
+    vp_items = 1.0 / chosen_exs
+
+    t_count = exs.shape[0]
+    vs = float(np.sqrt(np.sum(vs_items)) / t_count)
+    vp = float(np.sqrt(np.sum(vp_items)) / t_count)
+    return {"Vs": vs, "Vp": vp, "Vs_items": vs_items, "Vp_items": vp_items}
+
+
+def additive_penalty_items(wws, exs, min_propensity: float = 1e-12):
+    """Return Gamma_s(t,a) and Gamma_p(t,a) from Algorithm 1."""
+    exs = np.asarray(exs, dtype=float)
+    wws = np.asarray(wws, dtype=int).reshape(-1)
+    clipped_exs = np.clip(exs, min_propensity, None)
+    gamma_s = np.zeros_like(clipped_exs, dtype=float)
+    for arm in range(clipped_exs.shape[1]):
+        idx = wws == arm
+        gamma_s[idx, arm] = 1.0 / clipped_exs[idx, arm] ** 2
+    gamma_p = 1.0 / clipped_exs
+    return gamma_s, gamma_p
+
+
+def ptree_aug_one(
+    xxs,
+    yobs,
+    wws,
+    what_0,
+    exs,
+    beta: float = 0.1,
+    depth: int = 3,
+    muxs=None,
+    min_propensity: float = 1e-12,
+):
+    """One Algorithm-1 MM update for PPL."""
+    t_count = np.asarray(exs).shape[0]
+    gamma = PL_aipw_score(xxs, yobs, wws, exs, muxs=muxs, min_propensity=min_propensity)
+    variance = compute_variance_terms(wws, what_0, exs, min_propensity=min_propensity)
+    gamma_s, gamma_p = additive_penalty_items(wws, exs, min_propensity=min_propensity)
+
+    bs = 0.0 if variance["Vs"] <= 0 else 1.0 / (2.0 * t_count * variance["Vs"])
+    bp = 0.0 if variance["Vp"] <= 0 else 1.0 / (2.0 * t_count * variance["Vp"])
+    penalized = gamma - beta * bs / t_count * gamma_s - beta * bp / t_count * gamma_p
+    return fit_policy_tree(xxs, penalized, depth=depth)
+
+
+def PL_pessimism(
+    xxs,
+    yobs,
+    wws,
+    exs,
+    beta: float = 0.1,
+    depth: int = 3,
+    lower_bound: float | None = None,
+    muxs=None,
+    maxround: int = 50,
+    verbose: bool = False,
+    min_propensity: float = 1e-12,
+):
+    """Approximate PPL via Algorithm 1 from the paper.
+
+    `lower_bound` is kept for backward compatibility and is interpreted as a
+    numerical propensity floor only when explicitly provided.
+    """
+    if lower_bound is not None:
+        min_propensity = max(min_propensity, float(lower_bound))
+
+    current_tree = PL_greedy(xxs, yobs, wws, exs, depth=depth, muxs=muxs)
+    fitted_actions = predict_ptree(current_tree, xxs)
+
+    rounds = 0
+    for rounds in range(1, maxround + 1):
+        if verbose and (rounds <= 5 or rounds % 10 == 0):
+            print(f"learning in round {rounds} ...")
+        new_tree = ptree_aug_one(
+            xxs,
+            yobs,
+            wws,
+            what_0=fitted_actions,
+            exs=exs,
+            beta=beta,
+            depth=depth,
+            muxs=muxs,
+            min_propensity=min_propensity,
+        )
+        new_actions = predict_ptree(new_tree, xxs)
+        current_tree = new_tree
+        if np.array_equal(new_actions, fitted_actions):
+            fitted_actions = new_actions
+            break
+        fitted_actions = new_actions
+
+    return current_tree, rounds
+
+
+def _fold_indices(t_count: int, nfold: int) -> List[np.ndarray]:
+    return [fold.astype(int) for fold in np.array_split(np.arange(t_count), nfold)]
+
+
+def PPL_CV(
+    xxs,
+    yobs,
+    wws,
+    exs,
+    beta_list: Sequence[float] = (0.1, 1, 5, 10, 15),
+    Nfold: int = 5,
+    depth: int = 3,
+    lower_bound: float | None = None,
+    muxs=None,
+    maxround: int = 50,
+    verbose: bool = False,
+):
+    """Algorithm 2 cross-validation for adaptive data."""
+    t_count = np.asarray(exs).shape[0]
     if muxs is None:
-        muxs = np.zeros((T, K))
-    
-    Gamma_mat = PL_aipw_score(xxs, yobs, wws, exs, muxs)
-    Gamma_0 = np.zeros(T)
-    for k in range(K):
-        Gamma_0[(what_0==k) & (wws == k)] = Gamma_mat[(what_0==k) & (wws == k), k] 
-    
-    V0_res = compute_V(xxs, yobs, wws, what_0, exs, lower_bound=lower_bound)
-    Vgamma = V0_res['Vs_items'] + V0_res['Vp_items']
-    A0 = - np.sum(Gamma_0)/ (T * (T-1) * V0_res['maxV'])
-    B0 = 1 / (2 * (T-1) * V0_res['maxV'])
-    
-    Gamma_mat_aug = A0 * Vgamma + B0 * Vgamma**2
-    
-    return Gamma_mat_aug
-    
-""" compute policy tree for one step when using majorized variance """
-### == inputs:
-# xxs is the T*p covariate matrix
-# yobs is the T*1 observed outcomes 
-# wws is the T*1 observed actions A_t
-# what_0 is the T*1 predicted actions from a baseline policy pi_0
-# exs is the T*K matrix for e_t(x_t,a) for a=1,..,K
-# beta is the scalar for the penalty parameter 
-# depth is the depth of the policy tree  
-# muxs (optional) is the T*K matrix for hat{mu}(x_t,a) for a=1,..,K
-### == outputs:
-# a policy tree optimizing the variance upper bound
-def ptree_aug_one(xxs, yobs, wws, what_0, exs, beta = 0.1, depth = 2,
-                  lower_bound = 0.001, muxs = None):
-    T, K = exs.shape
-    
-    if muxs is None:
-        muxs = np.zeros((T, K))
-        
-    Gamma_mat = muxs.copy()
-    for w in range(K):
-        Gamma_mat[wws==w,w] = muxs[wws==w,w] + (yobs[wws==w] - muxs[wws==w,w]) / exs[wws==w,w]
-    
-    Gamma_mat_aug = compute_Gamma_upp(xxs, yobs, wws, what_0, exs, lower_bound, muxs)
-    Gamma_mat_all = Gamma_mat - beta * Gamma_mat_aug
-    
-    one_ptree = pt.hybrid_policy_tree(X = xxs, Gamma = Gamma_mat_all, depth=depth)
-    
-    return one_ptree
+        muxs = np.zeros_like(exs, dtype=float)
+
+    folds = _fold_indices(t_count, Nfold)
+    max_j = int(np.floor(3 * Nfold / 4))
+    scores: List[List[float]] = [[] for _ in beta_list]
+
+    for beta_idx, beta in enumerate(beta_list):
+        for j in range(1, max_j + 1):
+            train_idx = np.concatenate(folds[:j])
+            eval_idx = np.concatenate(folds[j:])
+            if len(train_idx) == 0 or len(eval_idx) == 0:
+                continue
+            tree, _ = PL_pessimism(
+                xxs[train_idx],
+                yobs[train_idx],
+                wws[train_idx],
+                exs[train_idx],
+                beta=float(beta),
+                depth=depth,
+                lower_bound=lower_bound,
+                muxs=muxs[train_idx],
+                maxround=maxround,
+                verbose=verbose,
+            )
+            score = emp_eval_ptree(
+                tree,
+                eval_xs=xxs[eval_idx],
+                eval_yobs=yobs[eval_idx],
+                eval_ws=wws[eval_idx],
+                eval_exs=exs[eval_idx],
+                eval_muxs=muxs[eval_idx],
+            )
+            scores[beta_idx].append(score)
+
+    avg_scores = [float(np.mean(s)) if s else -np.inf for s in scores]
+    std_scores = [float(np.std(s, ddof=1)) if len(s) > 1 else 0.0 for s in scores]
+    opt_idx = int(np.argmax(avg_scores))
+    lcb_scores = [
+        avg - std / np.sqrt(len(s)) if s else -np.inf
+        for avg, std, s in zip(avg_scores, std_scores, scores)
+    ]
+    lcb_idx = int(np.argmax(lcb_scores))
+
+    best_score = avg_scores[opt_idx]
+    best_se = std_scores[opt_idx] / np.sqrt(max(1, len(scores[opt_idx])))
+    eligible = [i for i, avg in enumerate(avg_scores) if avg >= best_score - best_se]
+    one_se_idx = int(max(eligible, key=lambda i: beta_list[i])) if eligible else opt_idx
+
+    return (
+        float(beta_list[opt_idx]),
+        float(beta_list[one_se_idx]),
+        float(beta_list[lcb_idx]),
+        scores,
+    )
 
 
-""" compute policy tree until converge when using majorized variance """
-### == inputs:
-# xxs is the T*p covariate matrix
-# yobs is the T*1 observed outcomes 
-# wws is the T*1 observed actions A_t 
-# exs is the T*K matrix for e_t(x_t,a) for a=1,..,K
-# beta is the scalar for the penalty parameter 
-# depth is the depth of the policy tree  
-# muxs (optional) is the T*K matrix for hat{mu}(x_t,a) for a=1,..,K
-### == outputs:
-# a policy tree optimizing the variance upper bound
-def PL_pessimism(xxs, yobs, wws, exs, beta = 0.1, depth = 2,
-                  lower_bound = 0.0001, muxs = None, maxround = 50, verbose=False):
-    T, K = exs.shape
-    
-    if muxs is None:
-        muxs = np.zeros((T, K))
-    
-    # start with greedy policy tree
-    current_ptree = PL_greedy(xxs, yobs, wws, exs, depth=depth, muxs = None)
-    # predict the current ptree as criterion
-    fitted_actions = predict_ptree(current_ptree, xxs)
-    
-    # iteratively fit policy trees
-    flag = True
-    fit_count = 0
-    while flag:
-        fit_count += 1
-        if fit_count < 10 or fit_count % 10 == 0:
-            if verbose:
-                print("learning in the "+str(fit_count)+"-th round ...")
-        new_ptree = ptree_aug_one(xxs, yobs, wws, 
-                                  what_0=fitted_actions, exs = exs, 
-                                  beta = beta, depth = depth,
-                                  lower_bound = lower_bound, muxs = muxs)
-        new_fitted_actions = predict_ptree(new_ptree, xxs)
-        
-        if np.sum(new_fitted_actions == fitted_actions) > 0.999 * T or fit_count > maxround:
-            flag = False 
-        
-        current_ptree = deepcopy(new_ptree)
-        fitted_actions = deepcopy(new_fitted_actions)
-    
-    return current_ptree, fit_count
+def PPL_CV_v2(*args, **kwargs):
+    return PPL_CV(*args, **kwargs)
 
 
-
-""" cross-validated pessimistic policy learning """
-# using the i-th fold to train and i+1-th fold to evaluate
-### == inputs:
-# xxs is the T*p covariate matrix
-# yobs is the T*1 observed outcomes 
-# wws is the T*1 observed actions A_t
-# exs is the T*K matrix for e_t(x_t,a) for a=1,..,K
-# beta_list is the list of penalty parameters to tune over
-# Nfold is the number of folds for cross-validation
-# depth, lower_bound, muxs, maxround are parameters for running PL_pessimism()
-### == outputs:
-# opt_beta: the optimal penalty parameter based on average loss
-# opt_beta_1se: the optimal penalty parameter based on 1-SE rule
-# opt_beta_lcb: the optimal penalty parameter based on lower confidence bound
-# avg_loss_list: the average loss for each beta in beta_list across folds
-
-def PPL_CV(xxs, yobs, wws, exs, 
-           beta_list = [0.1, 1, 5, 10, 15], Nfold = 2,
-           depth = 2, lower_bound = 0.0001, muxs = None, 
-           maxround = 50, verbose=False):
-    T, K = exs.shape
-    if muxs is None:
-        muxs = np.zeros((T,K))
-    
-    # sample splitting 
-    idx_list = []
-    for ii in range(Nfold):
-        idx_list.append(np.arange(np.floor(T*ii/Nfold), np.floor(T*(ii+1)/Nfold)))
-    
-    # evlauation scheme: use I_t to train, and I_t+1 to evaluate 
-    loss_list = [[] for _ in range(len(beta_list))]
-    
-    for ibeta in range(len(beta_list)):
-
-        current_beta = beta_list[ibeta]
-        for ifold in range(Nfold-1):
-            current_idx = [int(x) for x in idx_list[ifold]] 
-            # train pess(beta) on I_t
-            current_ptree, _ = PL_pessimism(xxs[current_idx].copy(), 
-                                         yobs[current_idx].copy(), 
-                                         wws[current_idx].copy(), 
-                                         exs[current_idx].copy(), 
-                                         beta = current_beta, depth = depth, 
-                                         lower_bound = lower_bound, 
-                                         muxs = muxs[current_idx].copy(), 
-                                         maxround = maxround, verbose=False)
-            # evaluate learned tree on I_t+1
-            eval_idx = [int(x) for x in idx_list[ifold+1]]  
-            current_score = emp_eval_ptree(current_ptree, 
-                                           eval_xs = xxs[eval_idx].copy(), 
-                                           eval_yobs = yobs[eval_idx].copy(), 
-                                           eval_ws = wws[eval_idx].copy(), 
-                                           eval_exs = exs[eval_idx].copy(), 
-                                           eval_muxs = muxs[eval_idx].copy())
-            loss_list[ibeta].append(current_score)
-    
-    avg_loss_list = [np.mean(ll) for ll in loss_list]
-    sse_ratio_list = [(np.mean(ll) - np.min(ll)) / np.std(ll) for ll in loss_list] 
-    sse_loss_list = [np.mean(ll) - np.std(ll)/np.sqrt(len(ll)) for ll in loss_list]
-     
-    
-    
-    opt_beta = beta_list[np.argmax(avg_loss_list)] 
-    opt_beta_lcb = beta_list[np.argmax(sse_loss_list)]
-    
-    smaller_beta = [beta_list[x] for x in range(len(beta_list)) if sse_ratio_list[x] <= 1]
-    if len(smaller_beta) > 0:
-        opt_beta_1se = np.max(smaller_beta) 
-    else:
-        opt_beta_1se = beta_list[np.argmax(sse_loss_list)]
-    
-    
-    return opt_beta, opt_beta_1se, opt_beta_lcb, loss_list
-
-""" cross-validated pessimistic policy learning (scheme 2) """
-# using the i-th fold to train and all subsequent data to evaluate
-### == inputs:
-# xxs is the T*p covariate matrix
-# yobs is the T*1 observed outcomes 
-# wws is the T*1 observed actions A_t
-# exs is the T*K matrix for e_t(x_t,a) for a=1,..,K
-# beta_list is the list of penalty parameters to tune over
-# Nfold is the number of folds for cross-validation
-# depth, lower_bound, muxs, maxround are parameters for running PL_pessimism()
-### == outputs:
-# opt_beta: the optimal penalty parameter based on average loss
-# opt_beta_1se: the optimal penalty parameter based on 1-SE rule
-# opt_beta_lcb: the optimal penalty parameter based on lower confidence bound
-# avg_loss_list: the average loss for each beta in beta_list across folds
-
-def PPL_CV_v2(xxs, yobs, wws, exs, 
-           beta_list = [0.1, 1, 5, 10, 15], Nfold = 2,
-           depth = 2, lower_bound = 0.0001, muxs = None, 
-           maxround = 50, verbose=False):
-    T, K = exs.shape
-    if muxs is None:
-        muxs = np.zeros((T,K))
-    
-    # sample splitting 
-    idx_list = []
-    for ii in range(Nfold):
-        idx_list.append(np.arange(np.floor(T*ii/Nfold), np.floor(T*(ii+1)/Nfold)))
-    
-    # evlauation scheme: use I_t to train, and I_t+1 to evaluate 
-    loss_list = [[] for _ in range(len(beta_list))]
-    
-    for ibeta in range(len(beta_list)): 
-
-        current_beta = beta_list[ibeta]
-        for ifold in range(Nfold-1):
-            current_idx = [int(x) for x in idx_list[ifold]] 
-            # train pess(beta) on I_t
-            current_ptree, _ = PL_pessimism(xxs[current_idx].copy(), 
-                                         yobs[current_idx].copy(), 
-                                         wws[current_idx].copy(), 
-                                         exs[current_idx].copy(), 
-                                         beta = current_beta, depth = depth, 
-                                         lower_bound = lower_bound, 
-                                         muxs = muxs[current_idx].copy(), 
-                                         maxround = maxround, verbose=False)
-            # evaluate learned tree on I_t+1
-            eval_idx = range(np.max(current_idx), T)  
-            current_score = emp_eval_ptree(current_ptree, 
-                                           eval_xs = xxs[eval_idx].copy(), 
-                                           eval_yobs = yobs[eval_idx].copy(), 
-                                           eval_ws = wws[eval_idx].copy(), 
-                                           eval_exs = exs[eval_idx].copy(), 
-                                           eval_muxs = muxs[eval_idx].copy())
-            loss_list[ibeta].append(current_score)
-    
-    avg_loss_list = [np.mean(ll) for ll in loss_list]
-    sse_ratio_list = [(np.mean(ll) - np.min(ll)) / np.std(ll) for ll in loss_list] 
-    sse_loss_list = [np.mean(ll) - np.std(ll)/np.sqrt(len(ll)) for ll in loss_list] 
-    
-    
-    opt_beta = beta_list[np.argmax(avg_loss_list)] 
-    opt_beta_lcb = beta_list[np.argmax(sse_loss_list)]
-    
-    smaller_beta = [beta_list[x] for x in range(len(beta_list)) if sse_ratio_list[x] <= 1]
-    if len(smaller_beta) > 0:
-        opt_beta_1se = np.max(smaller_beta) 
-    else:
-        opt_beta_1se = beta_list[np.argmax(sse_loss_list)]
-
-    
-    return opt_beta, opt_beta_1se, opt_beta_lcb, avg_loss_list
-
-
-
-""" cross-validated pessimistic policy learning (scheme 3) """
-# using samples before the i-th fold to train and all subsequent data to evaluate
-### == inputs:
-# xxs is the T*p covariate matrix
-# yobs is the T*1 observed outcomes 
-# wws is the T*1 observed actions A_t
-# exs is the T*K matrix for e_t(x_t,a) for a=1,..,K
-# beta_list is the list of penalty parameters to tune over
-# Nfold is the number of folds for cross-validation
-# depth, lower_bound, muxs, maxround are parameters for running PL_pessimism()
-### == outputs:
-# opt_beta: the optimal penalty parameter based on average loss
-# opt_beta_1se: the optimal penalty parameter based on 1-SE rule
-# opt_beta_lcb: the optimal penalty parameter based on lower confidence bound
-# avg_loss_list: the average loss for each beta in beta_list across folds
-
-def PPL_CV_v3(xxs, yobs, wws, exs, 
-           beta_list = [0.1, 1, 5, 10, 15], Nfold = 2,
-           depth = 2, lower_bound = 0.0001, muxs = None, 
-           maxround = 50, verbose=False):
-    T, K = exs.shape
-    if muxs is None:
-        muxs = np.zeros((T,K))
-    
-    # sample splitting 
-    idx_list = []
-    for ii in range(Nfold):
-        idx_list.append(np.arange(np.floor(T*ii/Nfold), np.floor(T*(ii+1)/Nfold)))
-    
-    # evlauation scheme: use I_t to train, and I_t+1 to evaluate 
-    loss_list = [[] for _ in range(len(beta_list))]
-    
-    for ibeta in range(len(beta_list)):
-
-        current_beta = beta_list[ibeta]
-        for ifold in range(Nfold *3 // 4 - 1):
-            current_idx = range(0, int(np.max(idx_list[ifold])))
-            
-            # train pess(beta) on I_t
-            current_ptree, _ = PL_pessimism(xxs[current_idx].copy(), 
-                                         yobs[current_idx].copy(), 
-                                         wws[current_idx].copy(), 
-                                         exs[current_idx].copy(), 
-                                         beta = current_beta, depth = depth, 
-                                         lower_bound = lower_bound, 
-                                         muxs = muxs[current_idx].copy(), 
-                                         maxround = maxround, verbose=False)
-            # evaluate learned tree on I_t+1
-            eval_idx = range(np.max(current_idx), T)  
-            current_score = emp_eval_ptree(current_ptree, 
-                                           eval_xs = xxs[eval_idx].copy(), 
-                                           eval_yobs = yobs[eval_idx].copy(), 
-                                           eval_ws = wws[eval_idx].copy(), 
-                                           eval_exs = exs[eval_idx].copy(), 
-                                           eval_muxs = muxs[eval_idx].copy())
-            loss_list[ibeta].append(current_score)
-    
-    avg_loss_list = [np.mean(ll) for ll in loss_list]
-    sse_ratio_list = [(np.mean(ll) - np.min(ll)) / np.std(ll) for ll in loss_list] 
-    sse_loss_list = [np.mean(ll) - np.std(ll)/np.sqrt(len(ll)) for ll in loss_list] 
-    
-    
-    opt_beta = beta_list[np.argmax(avg_loss_list)] 
-    opt_beta_lcb = beta_list[np.argmax(sse_loss_list)]
-    
-    smaller_beta = [beta_list[x] for x in range(len(beta_list)) if sse_ratio_list[x] <= 1]
-    if len(smaller_beta) > 0:
-        opt_beta_1se = np.max(smaller_beta) 
-    else:
-        opt_beta_1se = beta_list[np.argmax(sse_loss_list)]
-
-    
-    return opt_beta, opt_beta_1se, opt_beta_lcb, avg_loss_list
+def PPL_CV_v3(*args, **kwargs):
+    return PPL_CV(*args, **kwargs)

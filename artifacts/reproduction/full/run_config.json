@@ -1,0 +1,14 @@
+{
+  "mode": "full",
+  "experiment": "mab",
+  "seed": 20260605,
+  "config": {
+    "mode": "full",
+    "mab_nrep": 1000,
+    "tree_nrep": 200,
+    "ts_nrep": 200,
+    "real_nrep": 1,
+    "t_eval": 100000,
+    "num_mc": 1000
+  }
+}

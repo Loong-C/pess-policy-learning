@@ -1,4 +1,5 @@
-#!/usr/bin/env bash 
-python setup.py develop
-conda install -c conda-forge rpy2 openml jupyter
-conda install -c conda-forge r-devtools r-grf r-bh
+#!/usr/bin/env bash
+set -euo pipefail
+
+conda env create -f environment.yml
+conda run -n pess-pl-legacy python -m pip install -e .

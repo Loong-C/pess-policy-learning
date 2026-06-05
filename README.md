@@ -1,23 +1,27 @@
-<h1 align="center">
-<p> Reproduction code for Pessimistic Policy Learning
-</h1> 
+# Reproduction workspace for Pessimistic Policy Learning
 
-This repository is being used as an attempted reproduction workspace for the paper [Policy learning "without" overlap: Pessimism and generalized empirical Bernstein's inequality](https://arxiv.org/abs/2212.09900).
+This repository is an attempted reproduction workspace for the paper [Policy learning "without" overlap: Pessimism and generalized empirical Bernstein's inequality](https://arxiv.org/abs/2212.09900).
 
-The current goal is to document what can be reproduced, what environment and data are required, and where the checked code differs from the paper.
+The code has been repaired to match the algorithms and experiments described in Sections 6 and 7 more closely:
 
+- Algorithm 1 PPL now uses the paper's MM update with the additive `Gamma_s` and `Gamma_p` penalty terms.
+- Algorithm 2 cross-validation now uses consecutive folds and prefix-train/suffix-evaluate splits for adaptive data.
+- Synthetic DGPs now match the reward formulas in Section 7.
+- The MAB experiment uses `mu / sqrt(T)` and reports rescaled suboptimality.
+- The Section 7.1.2 linear PEVI baseline is included.
+- The real-data OpenML list now contains 33 datasets, including `skin-segmentation`.
 
-### Usage 
-The original `install.sh` is not sufficient on this checkout because `setup.py` expects a missing `LICENSE` file and recent `rpy2` releases are incompatible with the current `numpy2ri.activate()` call in `algs/ptree.py`.
+## Environment
 
-The working local reproduction environment is captured in `environment.yml`:
+The working local environment is captured in `environment.yml`:
 
 ```bash
 conda env create -f environment.yml
 conda activate pess-pl-legacy
+python -m pip install -e .
 ```
 
-On Windows, set these environment variables after activation so Python can find the local repository and R installation:
+On Windows, set these conda environment variables after activation:
 
 ```powershell
 conda env config vars set R_HOME="$env:CONDA_PREFIX\Lib\R" PYTHONPATH="$PWD"
@@ -25,30 +29,57 @@ conda deactivate
 conda activate pess-pl-legacy
 ```
 
-This environment has been smoke-tested with Python dependencies, R `policytree`/`grf`, `algs.ptree`, `algs.pess`, and a small policy-tree call.
+This environment has been tested with Python dependencies, R `policytree`/`grf`, editable installation, and Python-to-R policy-tree calls.
 
-OpenML datasets used by `experiments/real.py` have been downloaded to a local cache at `data/openml/`. The cache itself is git-ignored; `notes/openml_cache_manifest.csv` records the dataset names, OpenML IDs, targets, and shapes. The script currently lists 32 datasets, although the paper reports 33 real datasets.
+## Data
 
+OpenML datasets for Section 7.3 are cached under `data/openml/`, which is intentionally git-ignored. The committed manifest `notes/openml_cache_manifest.csv` records the 33 dataset names, OpenML IDs, targets, shapes, and class counts.
 
-Folder `experiments` contains scripts for reproducing the experiments:
-- `MAB_batch.py`: experiments in Section 7.1.1 (PPL).
-- `MAB_batch_clip.py`: experiments in Section 7.1.1 (with clipping).
-- `synthetic_dt_linpess.py`: experiments in Section 7.1.2 (with linear PEVI).
-- `synthetic_linear.py`: experiments in Section 7.2.1 (TS contextual bandit with well-specified exploration).
-- `synthetic_opt.py`: experiments in Section 7.2.2 and 7.2.4 (cross validation) (TS contextual bandit with optimal overlap).
-- `synthetic_miss.py`: experiments in Section 7.2.3 (TS contextual bandit with misspecified exploration).
-- `real.py`: experiments in Section 7.3 (real datasets).
- 
-### Other files
-Folder `utils` contains code for data generation and thopmson sampling. 
+If an OpenML default target no longer behaves like a classification target, the real-data runner skips it and writes the reason to `real_skipped.csv`. In the current cache, `houses` has thousands of unique target values and is guarded this way.
 
-Folder `algs` contains the key algorithms for policy tree search, pessimistic policy learning, and cross validation.
+## Running experiments
 
+The maintained entry point is:
 
-#### Reference 
-
-<a name="reference"></a>
+```bash
+python experiments/reproduce.py --mode quick --experiment all --seed 20260605
 ```
+
+Available experiments are `mab`, `tree`, `ts`, `ts-cv`, `real`, and `all`.
+
+`quick` mode is a smoke-test mode that keeps runtime manageable. `full` mode keeps the paper-scale settings where feasible:
+
+```bash
+python experiments/reproduce.py --mode full --experiment mab --seed 20260605
+python experiments/reproduce.py --mode full --experiment tree --seed 20260605
+python experiments/reproduce.py --mode full --experiment ts --seed 20260605
+python experiments/reproduce.py --mode full --experiment ts-cv --seed 20260605
+python experiments/reproduce.py --mode full --experiment real --seed 20260605
+```
+
+The old script names in `experiments/` remain as compatibility wrappers and delegate to `experiments/reproduce.py`.
+
+## Current reproduction artifacts
+
+Generated artifacts are stored in `artifacts/reproduction/`:
+
+- `full/`: paper-scale MAB results for Section 7.1.1.
+- `quick/`: smoke-test results for MAB, contextual non-adaptive experiments, TS synthetic experiments, TS CV, and a real-data subset.
+- `reproduction_report_zh.md`: Chinese report comparing the generated results with the paper and explaining statistical confidence.
+
+The full Figure 5-10 grids were not all completed in this interaction because they require very large numbers of R `policytree` fits, especially for 33 OpenML datasets with 5-fold CV. The code paths and commands are present; the committed completed full-scale result is the MAB experiment.
+
+## Repository layout
+
+- `algs/`: policy tree fitting, greedy policy learning, PPL, and cross-validation.
+- `utils/`: data-generating processes, Thompson Sampling, and experiment collection helpers.
+- `experiments/`: maintained reproduction CLI plus compatibility wrappers.
+- `paper/`: local copy of the paper used for checking Sections 6 and 7.
+- `notes/`: reproduction log and OpenML cache manifest.
+
+## Reference
+
+```bibtex
 @article{jin2025policy,
   title={Policy learning" without" overlap: Pessimism and generalized empirical bernstein's inequality},
   author={Jin, Ying and Ren, Zhimei and Yang, Zhuoran and Wang, Zhaoran},

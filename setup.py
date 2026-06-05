@@ -1,16 +1,16 @@
-from os.path import abspath, dirname, join
-from setuptools import setup
+from os.path import abspath, dirname, exists, join
+from setuptools import find_packages, setup
 
 here = abspath(dirname(__file__))
 
 with open(join(here, 'README.md')) as f:
     readme = f.read()
 
-with open(join(here, 'LICENSE')) as f:
-    lic = f.read()
+license_path = join(here, 'LICENSE')
+lic = open(license_path).read() if exists(license_path) else 'MIT'
 
 setup(name='pess_policy_learning', 
-      py_modules=['utils'],
+      packages=find_packages(include=['algs', 'algs.*', 'utils', 'utils.*', 'experiments', 'experiments.*']),
       install_requires=[
           "numpy>=1.17.0",
           "pandas>=0.25.0",
@@ -19,15 +19,13 @@ setup(name='pess_policy_learning',
           "autograd>=1.2",
           "statsmodels>=0.10.1",
           "ipykernel>=5.1.2",
-          "autograd",
           "dill",
           "jupyterlab>=1.1.4",
           "matplotlib>=3.1.1",
           "seaborn",
-          "sklearn",
           "openml",
+          "tabulate",
           "zipp",
-          "matplotlib",
       ],
       classifiers=[
           'Development Status :: 1 - Planning',
