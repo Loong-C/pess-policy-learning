@@ -213,3 +213,196 @@ def PPL_CV_v2(*args, **kwargs):
 
 def PPL_CV_v3(*args, **kwargs):
     return PPL_CV(*args, **kwargs)
+
+
+def _published_variance_terms(wws, policy_actions, exs, lower_bound: float = 0.0001):
+    """Variance proxy used by the public code that generated the paper figures."""
+    exs = np.asarray(exs, dtype=float)
+    wws = np.asarray(wws, dtype=int).reshape(-1)
+    policy_actions = np.asarray(policy_actions, dtype=int).reshape(-1)
+    t_count, arm_count = exs.shape
+
+    vs_items = np.zeros((t_count, arm_count), dtype=float)
+    vp_items = np.zeros((t_count, arm_count), dtype=float)
+    vh_items = np.zeros((t_count, arm_count), dtype=float)
+    for arm in range(arm_count):
+        chosen = policy_actions == arm
+        matched = chosen & (wws == arm)
+        vs_items[matched, arm] = 1.0 / np.maximum(exs[matched, arm], 1e-12) ** 2
+        propensity = np.maximum(exs[chosen, arm], lower_bound)
+        vp_items[chosen, arm] = 1.0 / propensity
+        vh_items[chosen, arm] = 1.0 / propensity**3
+
+    vs = float(np.sqrt(vs_items.sum()) / t_count)
+    vp = float(np.sqrt(vp_items.sum()) / t_count)
+    vh = float(vh_items.sum() ** 0.25 / t_count)
+    return {
+        "Vs_items": vs_items,
+        "Vp_items": vp_items,
+        "Vh_items": vh_items,
+        "Vs": vs,
+        "Vp": vp,
+        "Vh": vh,
+        "maxV": max(vs, vp, vh),
+    }
+
+
+def _published_mm_update(
+    xxs,
+    yobs,
+    wws,
+    policy_actions,
+    exs,
+    beta: float,
+    depth: int,
+    lower_bound: float,
+    muxs=None,
+):
+    """One update from the authors' released figure-generation implementation."""
+    exs = np.asarray(exs, dtype=float)
+    t_count = exs.shape[0]
+    if t_count < 2:
+        return PL_greedy(xxs, yobs, wws, exs, depth=depth, muxs=muxs)
+
+    gamma = PL_aipw_score(xxs, yobs, wws, exs, muxs=muxs, min_propensity=lower_bound)
+    variance = _published_variance_terms(wws, policy_actions, exs, lower_bound=lower_bound)
+    max_v = variance["maxV"]
+    if max_v <= 0:
+        return fit_policy_tree(xxs, gamma, depth=depth)
+
+    selected = _selected(gamma, policy_actions)
+    observed = np.asarray(wws, dtype=int) == np.asarray(policy_actions, dtype=int)
+    gamma_0 = np.where(observed, selected, 0.0)
+    variance_items = variance["Vs_items"] + variance["Vp_items"]
+    a0 = -float(gamma_0.sum()) / (t_count * (t_count - 1) * max_v)
+    b0 = 1.0 / (2.0 * (t_count - 1) * max_v)
+    majorizer = a0 * variance_items + b0 * variance_items**2
+    return fit_policy_tree(xxs, gamma - float(beta) * majorizer, depth=depth)
+
+
+def PL_pessimism_published(
+    xxs,
+    yobs,
+    wws,
+    exs,
+    beta: float = 0.1,
+    depth: int = 3,
+    lower_bound: float = 0.0001,
+    muxs=None,
+    maxround: int = 50,
+    verbose: bool = False,
+):
+    """Clean implementation of the public code used for the published figures.
+
+    This intentionally remains separate from :func:`PL_pessimism`, which follows
+    the displayed Algorithm 1 in Section 6.
+    """
+    current_tree = PL_greedy(xxs, yobs, wws, exs, depth=depth, muxs=muxs)
+    fitted_actions = predict_ptree(current_tree, xxs)
+    t_count = len(fitted_actions)
+
+    rounds = 0
+    for rounds in range(1, maxround + 2):
+        if verbose and (rounds <= 5 or rounds % 10 == 0):
+            print(f"published-profile learning round {rounds} ...")
+        new_tree = _published_mm_update(
+            xxs,
+            yobs,
+            wws,
+            fitted_actions,
+            exs,
+            beta=float(beta),
+            depth=depth,
+            lower_bound=lower_bound,
+            muxs=muxs,
+        )
+        new_actions = predict_ptree(new_tree, xxs)
+        current_tree = new_tree
+        agreement = float(np.mean(new_actions == fitted_actions))
+        fitted_actions = new_actions
+        if agreement > 0.999 or rounds > maxround:
+            break
+    return current_tree, rounds
+
+
+def PPL_CV_published(
+    xxs,
+    yobs,
+    wws,
+    exs,
+    beta_list: Sequence[float] = (0.1, 1, 5, 10, 15),
+    Nfold: int = 5,
+    depth: int = 3,
+    lower_bound: float = 0.0001,
+    muxs=None,
+    maxround: int = 50,
+    verbose: bool = False,
+):
+    """Cross-validation behavior of the authors' released ``PPL_CV_v3``.
+
+    Its two-prefix behavior for five folds differs from displayed Algorithm 2;
+    the distinction is retained so published-figure and paper-spec runs can be
+    audited independently.
+    """
+    xxs = np.asarray(xxs)
+    yobs = np.asarray(yobs)
+    wws = np.asarray(wws)
+    exs = np.asarray(exs)
+    if muxs is None:
+        muxs = np.zeros_like(exs, dtype=float)
+    else:
+        muxs = np.asarray(muxs)
+
+    folds = _fold_indices(len(xxs), Nfold)
+    split_count = max(1, Nfold * 3 // 4 - 1)
+    scores: List[List[float]] = [[] for _ in beta_list]
+    for beta_idx, beta in enumerate(beta_list):
+        for fold_idx in range(split_count):
+            boundary = int(folds[fold_idx][-1])
+            train_idx = np.arange(0, boundary, dtype=int)
+            eval_idx = np.arange(boundary, len(xxs), dtype=int)
+            if len(train_idx) == 0 or len(eval_idx) == 0:
+                continue
+            tree, _ = PL_pessimism_published(
+                xxs[train_idx],
+                yobs[train_idx],
+                wws[train_idx],
+                exs[train_idx],
+                beta=float(beta),
+                depth=depth,
+                lower_bound=lower_bound,
+                muxs=muxs[train_idx],
+                maxround=maxround,
+                verbose=verbose,
+            )
+            scores[beta_idx].append(
+                emp_eval_ptree(
+                    tree,
+                    eval_xs=xxs[eval_idx],
+                    eval_yobs=yobs[eval_idx],
+                    eval_ws=wws[eval_idx],
+                    eval_exs=exs[eval_idx],
+                    eval_muxs=muxs[eval_idx],
+                )
+            )
+
+    avg_scores = [float(np.mean(values)) if values else -np.inf for values in scores]
+    std_scores = [float(np.std(values)) if values else np.inf for values in scores]
+    opt_idx = int(np.argmax(avg_scores))
+    lcb = [
+        avg - std / np.sqrt(max(1, len(values)))
+        for avg, std, values in zip(avg_scores, std_scores, scores)
+    ]
+    lcb_idx = int(np.argmax(lcb))
+    ratios = [
+        (avg - min(values)) / std if values and std > 0 else np.inf
+        for avg, std, values in zip(avg_scores, std_scores, scores)
+    ]
+    eligible = [idx for idx, ratio in enumerate(ratios) if ratio <= 1]
+    one_se_idx = max(eligible, key=lambda idx: beta_list[idx]) if eligible else lcb_idx
+    return (
+        float(beta_list[opt_idx]),
+        float(beta_list[one_se_idx]),
+        float(beta_list[lcb_idx]),
+        scores,
+    )

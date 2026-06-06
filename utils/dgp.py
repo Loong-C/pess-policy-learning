@@ -81,6 +81,29 @@ class MultiLinear:
         return np.argmax(self.mean(xs), axis=1)
 
 
+class PublishedMultiQuad(MultiQuad):
+    """Nonlinear reward model used by the authors' released experiment code."""
+
+    def mean(self, xs):
+        xs = np.asarray(xs, dtype=float)
+        muxs = np.zeros((xs.shape[0], self.K), dtype=float)
+        for arm in range(self.K):
+            muxs[:, arm] = 1.0 - self.alpha[arm] + self.alpha[arm] * xs[:, 0] ** 2
+        return muxs
+
+
+class PublishedMultiLinear(MultiLinear):
+    """Well-specified reward model underlying the published Figure 6 values."""
+
+    def mean(self, xs):
+        xs = np.asarray(xs, dtype=float)
+        signal = xs[:, 0] / 2.0 - xs[:, 1]
+        muxs = np.zeros((xs.shape[0], self.K), dtype=float)
+        for arm in range(self.K):
+            muxs[:, arm] = 1.0 - self.alpha[arm] / 2.0 + self.alpha[arm] * signal
+        return muxs
+
+
 class MABandit:
     """No-covariate five-arm bandit used in Section 7.1.1."""
 

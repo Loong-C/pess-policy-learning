@@ -13,6 +13,7 @@ from experiments.reproduce import REAL_DATASETS, outdir_for, run_real, summarize
 def main():
     parser = argparse.ArgumentParser(description="Run Section 7.3 OpenML real-data experiments.")
     parser.add_argument("--mode", choices=["quick", "full"], default="quick")
+    parser.add_argument("--protocol", choices=["published", "paper-spec"], default="published")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--jobs", type=int, default=1)
     parser.add_argument("--resume", action="store_true")
@@ -23,8 +24,8 @@ def main():
     parser.add_argument("--depth", type=int, default=5, help="Accepted for compatibility; maintained runner uses depth 5 as in the paper.")
     args = parser.parse_args()
 
-    outdir = outdir_for(args.mode)
-    run_real(args.mode, seed=args.seed, jobs=args.jobs, resume=args.resume)
+    outdir = outdir_for(args.mode, args.protocol)
+    run_real(args.mode, args.protocol, seed=args.seed, jobs=args.jobs, resume=args.resume)
     report = summarize(outdir)
     print(f"wrote {report}")
 

@@ -13,6 +13,7 @@ from experiments.reproduce import outdir_for, run_ts_synthetic, summarize
 def main():
     parser = argparse.ArgumentParser(description="Run Section 7.2.1 well-specified Thompson Sampling experiments.")
     parser.add_argument("--mode", choices=["quick", "full"], default="quick")
+    parser.add_argument("--protocol", choices=["published", "paper-spec"], default="published")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--jobs", type=int, default=1)
     parser.add_argument("--resume", action="store_true")
@@ -22,8 +23,8 @@ def main():
     parser.add_argument("--batch_size", type=int, default=None, help="Accepted for compatibility; maintained runner evaluates batch sizes 10 and 100.")
     args = parser.parse_args()
 
-    outdir = outdir_for(args.mode)
-    run_ts_synthetic(args.mode, seed=args.seed, jobs=args.jobs, resume=args.resume)
+    outdir = outdir_for(args.mode, args.protocol)
+    run_ts_synthetic(args.mode, args.protocol, seed=args.seed, jobs=args.jobs, resume=args.resume)
     report = summarize(outdir)
     print(f"wrote {report}")
 

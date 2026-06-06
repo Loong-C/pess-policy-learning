@@ -5,5 +5,7 @@ __pycache__/
 data/openml/
 results/
 tmp/
+artifacts/reproduction/**/data/chunks/
+artifacts/reproduction/**/logs/
 
 .ipynb_checkpoints/

@@ -23,6 +23,7 @@ def run_experiment(
     if_floor=False,
     floor_start=None,
     floor_decay=None,
+    ridge_mode="fixed",
 ):
     """Collect adaptive data with batched linear Thompson Sampling."""
     xs = np.asarray(xs, dtype=float)
@@ -43,10 +44,10 @@ def run_experiment(
     if bandit_model != "TS":
         raise ValueError("Only bandit_model='TS' is implemented.")
 
-    agent = LinTS(K, p, dgp_model, num_mc=num_mc)
+    agent = LinTS(K, p, dgp_model, num_mc=num_mc, ridge_mode=ridge_mode)
     agent.initialize_ps(T)
     agent.initialize_w(T)
-    agent.set_floor(if_floor=if_floor, floor_decay=floor_decay, floor_total=T)
+    agent.set_floor(if_floor=if_floor, floor_start=floor_start, floor_decay=floor_decay)
 
     batch_ends = np.cumsum(batch_sizes)
     initial_end = int(batch_ends[0])
@@ -83,6 +84,7 @@ def run_experiment_opt(
     if_floor=False,
     floor_start=None,
     floor_decay=None,
+    ridge_mode="fixed",
 ):
     """TS collection with an additional 0.1 floor on the true optimal arm."""
     xs = np.asarray(xs, dtype=float)
@@ -99,10 +101,10 @@ def run_experiment_opt(
     ys_used = ys[:T_used]
     _, p = xs_used.shape
 
-    agent = LinTS(K, p, dgp_model, num_mc=num_mc)
+    agent = LinTS(K, p, dgp_model, num_mc=num_mc, ridge_mode=ridge_mode)
     agent.initialize_ps(T_used)
     agent.initialize_w(T_used)
-    agent.set_floor(if_floor=if_floor, floor_decay=floor_decay, floor_total=T_used)
+    agent.set_floor(if_floor=if_floor, floor_start=floor_start, floor_decay=floor_decay)
 
     batch_ends = np.cumsum(batch_sizes)
     initial_end = int(batch_ends[0])

@@ -123,3 +123,48 @@ Validation:
 - Ran `python -m compileall -q experiments`.
 - Checked `python experiments/reproduce.py --help`.
 - Checked `python experiments/compare_to_paper.py --help`.
+
+## 2026-06-06 11:31:53 +08:00
+
+Scope: began the complete paper-scale run, stopped an invalid intermediate run
+after a protocol audit, and separated literal paper fidelity from published
+figure fidelity before restarting.
+
+Audit findings:
+- The reward formulas written in Section 7 differ from the authors' released
+  experiment code. In particular, the literal Section 7.2.1 `MultiLinear`
+  formula cannot produce the value range shown in Figure 6.
+- Displayed Algorithms 1-2 differ from the released MM and cross-validation
+  implementation used for the numerical figures.
+- Figure 4 behavior reveals two additional implementation details: the MAB
+  variance proxy is propensity/count based, and empty arms at `T=100` retain
+  the released code's `NaN` argmax behavior.
+- The Figure 4 caption calls the ribbon empirical SD, but the vector width and
+  released summary code correspond to a standard-error-scale quantity.
+
+Changes:
+- Added explicit `published` and `paper-spec` protocols. The former is used for
+  numerical reproduction; the latter preserves the literal displayed
+  algorithms and Section 7 reward formulas for specification auditing.
+- Added cleaned published-profile PPL and CV implementations without replacing
+  the paper-spec implementations.
+- Restored the published nonlinear/linear reward models, RidgeCV TS updates,
+  dynamic propensity floors, and the numerical pure-exploration floor.
+- Optimized TS propensity calculation to evaluate only the current batch rather
+  than recomputing posterior draws for every row in the full trajectory.
+- Moved new outputs to
+  `artifacts/reproduction/<protocol>/<mode>/` and made run configurations
+  experiment-specific to avoid concurrent writers.
+- Added Figure 4 vector-reference extraction and protocol unit tests.
+
+Validation and current result:
+- Published quick MAB/tree/TS runs completed without chunk errors.
+- Published tree values returned to the Figure 5 range (roughly 0.75-2.00);
+  TS values returned to the Figure 6-8 range (roughly 1.3-2.1).
+- Full Figure 4 MAB reproduction completed.
+- Vector extraction produced 168 paper reference cells. Mean absolute
+  difference is about `1.1e-6`; all 168/168 cells pass TOST at alpha 0.05 with
+  equivalence margin 0.0025.
+- The stopped paper-spec partial run had produced 173 tree and 214 TS chunks.
+  Those chunks remain isolated in the old ignored runtime directory and are not
+  used by the published-protocol run.

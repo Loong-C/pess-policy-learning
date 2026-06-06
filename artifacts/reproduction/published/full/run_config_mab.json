@@ -1,7 +1,10 @@
 {
   "mode": "full",
+  "protocol": "published",
   "experiment": "mab",
   "seed": 20260605,
+  "jobs": 1,
+  "resume": false,
   "config": {
     "mode": "full",
     "mab_nrep": 1000,

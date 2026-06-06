@@ -2,7 +2,19 @@
 
 This repository is an attempted reproduction workspace for the paper [Policy learning "without" overlap: Pessimism and generalized empirical Bernstein's inequality](https://arxiv.org/abs/2212.09900).
 
-The code has been repaired to match the algorithms and experiments described in Sections 6 and 7 more closely:
+The code has been repaired and audited against both Sections 6-7 and the
+authors' public figure-generation code. The audit found material differences
+between the displayed paper specification and the implementation underlying
+some published figures, so the runner exposes two explicit protocols:
+
+- `published` (default): reproduces the public implementation and published numerical figures.
+- `paper-spec`: follows the displayed Algorithm 1/2 and the reward formulas written in Sections 6-7.
+
+This distinction is intentional. It prevents a result from being called
+"faithful" without saying whether that means faithful to the prose/equations or
+to the published numerical assets.
+
+Repairs shared by the two protocols include:
 
 - Algorithm 1 PPL now uses the paper's MM update with the additive `Gamma_s` and `Gamma_p` penalty terms.
 - Algorithm 2 cross-validation now uses consecutive folds and prefix-train/suffix-evaluate splits for adaptive data.
@@ -42,27 +54,29 @@ If an OpenML default target no longer behaves like a classification target, the 
 The maintained entry point is:
 
 ```bash
-python experiments/reproduce.py --mode quick --experiment all --seed 20260605
+python experiments/reproduce.py --mode quick --protocol published --experiment all --seed 20260605
 ```
 
 Available experiments are `mab`, `tree`, `ts`, `ts-cv`, `real`, and `all`. Slow experiments support chunk-level parallelism and resume:
 
 ```bash
-python experiments/reproduce.py --mode full --experiment tree --jobs 16 --resume --seed 20260605
-python experiments/reproduce.py --mode full --experiment ts --jobs 16 --resume --seed 20260605
-python experiments/reproduce.py --mode full --experiment real --jobs 4 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 20 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 20 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment real --jobs 2 --resume --seed 20260605
 ```
 
-Completed chunks are written below `artifacts/reproduction/<mode>/data/chunks/`; rerunning with `--resume` skips chunks already on disk.
+Completed chunks are written below
+`artifacts/reproduction/<protocol>/<mode>/data/chunks/`; rerunning with
+`--resume` skips chunks already on disk.
 
 `quick` mode is a smoke-test mode that keeps runtime manageable. `full` mode keeps the paper-scale settings where feasible:
 
 ```bash
-python experiments/reproduce.py --mode full --experiment mab --seed 20260605
-python experiments/reproduce.py --mode full --experiment tree --seed 20260605
-python experiments/reproduce.py --mode full --experiment ts --seed 20260605
-python experiments/reproduce.py --mode full --experiment ts-cv --seed 20260605
-python experiments/reproduce.py --mode full --experiment real --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment mab --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 20 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 20 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment ts-cv --jobs 20 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment real --jobs 2 --resume --seed 20260605
 ```
 
 The old script names in `experiments/` remain as compatibility wrappers and delegate to `experiments/reproduce.py`.
@@ -71,11 +85,15 @@ The old script names in `experiments/` remain as compatibility wrappers and dele
 
 Generated artifacts are stored in `artifacts/reproduction/`:
 
-- `full/`: paper-scale MAB results for Section 7.1.1.
-- `quick/`: smoke-test results for MAB, contextual non-adaptive experiments, TS synthetic experiments, TS CV, and a real-data subset.
+- `published/full/`: paper-scale published-protocol results.
+- `published/quick/`: published-protocol smoke-test results.
+- `paper-spec/`: literal paper-specification results when requested.
+- `paper_reference/`: numerical references digitized from the paper's vector figures.
 - `reproduction_report_zh.md`: Chinese report comparing the generated results with the paper and explaining statistical confidence.
 
-The full Figure 5-10 grids were not all completed in this interaction because they require very large numbers of R `policytree` fits, especially for 33 OpenML datasets with 5-fold CV. The code paths and commands are present; the committed completed full-scale result is the MAB experiment.
+The full Figure 5-10 grids are resumable multi-day CPU workloads. Runtime chunk
+files are intentionally ignored; consolidated CSVs, figures, reports, and run
+configurations are committed after completion.
 
 ## Statistical comparison with the paper
 
@@ -83,16 +101,20 @@ A statistically meaningful "successful reproduction" claim needs numeric paper r
 
 ```bash
 python experiments/compare_to_paper.py \
-  --ours artifacts/reproduction/full/data/mab_results.csv \
-  --paper artifacts/reproduction/paper_reference_mab.csv \
+  --ours artifacts/reproduction/published/full/data/mab_results.csv \
+  --paper artifacts/reproduction/paper_reference/figure4_mab.csv \
   --metric rescaled_subopt \
   --keys setting_name,T,method \
   --margin 0.005 \
   --alpha 0.05 \
-  --out artifacts/reproduction/mab_paper_comparison.csv
+  --out artifacts/reproduction/published/full/data/figure4_equivalence.csv
 ```
 
-The script uses a two one-sided tests equivalence check. Without numeric paper references and a pre-declared equivalence margin, the current artifacts only support a partial qualitative reproduction statement, not a formal statistical success claim.
+`experiments/extract_mab_paper_reference.py` extracts Figure 4 means and
+uncertainty from the arXiv vector PDF after conversion with `pdftocairo -svg`.
+The comparison script uses a two one-sided tests equivalence check. An
+equivalence margin and significance level must be declared before interpreting
+the result.
 
 ## Repository layout
 
