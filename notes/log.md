@@ -387,3 +387,8 @@ Interim complete-cell audit while the remaining full grid continues:
   24 TS because the remaining task ratio implied completion times of about
   53.5 versus 41 hours. The balanced estimate is about 47-48 hours for both
   parents, without increasing total process count or memory pressure.
+- Extended the continuation scheduler beyond raw experiments. After Figure 9
+  TS-CV and Figure 10 real data finish, it now automatically runs the complete
+  equivalence analysis, regenerates the UTF-8 Chinese report, and executes the
+  protocol regression suite. Final Git staging remains a separate reviewed
+  step so unrelated worktree changes cannot be committed automatically.

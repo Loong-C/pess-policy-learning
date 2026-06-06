@@ -77,10 +77,47 @@ function Invoke-ReproductionPhase(
     }
 }
 
+function Invoke-PythonPhase(
+    [string]$Name,
+    [string[]]$Arguments
+) {
+    $stdout = Join-Path $logDir "$Name.out.log"
+    $stderr = Join-Path $logDir "$Name.err.log"
+    Write-Status "starting $Name"
+    $process = Start-Process `
+        -FilePath $PythonExe `
+        -ArgumentList $Arguments `
+        -WorkingDirectory $repo `
+        -RedirectStandardOutput $stdout `
+        -RedirectStandardError $stderr `
+        -WindowStyle Hidden `
+        -PassThru `
+        -Wait
+    Write-Status "finished $Name with exit code $($process.ExitCode)"
+    if ($process.ExitCode -ne 0) {
+        throw "$Name failed with exit code $($process.ExitCode)"
+    }
+}
+
 Write-Status "waiting for tree PID $TreeProcessId and TS PID $TsProcessId"
 Wait-Process -Id $TreeProcessId, $TsProcessId -ErrorAction SilentlyContinue
 Write-Status "tree and TS parent processes finished"
 
 Invoke-ReproductionPhase -Experiment "ts-cv" -Jobs 40
 Invoke-ReproductionPhase -Experiment "real" -Jobs $RealJobs
-Write-Status "all scheduled full reproduction phases finished"
+Invoke-PythonPhase -Name "analysis" -Arguments @(
+    "experiments\analyze_full_reproduction.py",
+    "--root", "artifacts\reproduction\published\full",
+    "--reference-root", "artifacts\reproduction\paper_reference",
+    "--alpha", "0.05"
+)
+Invoke-PythonPhase -Name "report" -Arguments @(
+    "experiments\write_reproduction_report_zh.py",
+    "--root", "artifacts\reproduction\published\full",
+    "--reference-root", "artifacts\reproduction\paper_reference",
+    "--output", "artifacts\reproduction\reproduction_report_zh.md"
+)
+Invoke-PythonPhase -Name "tests" -Arguments @(
+    "-m", "pytest", "-q", "tests\test_protocols.py"
+)
+Write-Status "all full reproduction, analysis, report, and test phases finished"

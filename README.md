@@ -96,6 +96,9 @@ Completed chunks are written below
 The continuation scheduler calls the environment's Python executable directly
 and sets `R_HOME`, `PYTHONPATH`, and the environment library paths itself.
 This avoids making multi-day runs depend on a later Conda CLI initialization.
+After the queued TS-CV and real-data phases finish, it also runs the complete
+equivalence analysis, writes the Chinese report, and executes the protocol
+regression suite.
 
 `quick` mode is a smoke-test mode that keeps runtime manageable. `full` mode keeps the paper-scale settings where feasible:
 
