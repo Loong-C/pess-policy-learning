@@ -341,3 +341,21 @@ Figure 6 sentinel still differed from the vector reference.
   both synthetic phases and Figure 9 have released their memory.
 - Increased the queued Figure 9 TS-CV stage from 20 to 40 workers because it
   runs alone after both 20-worker synthetic phases have exited.
+
+## 2026-06-06 14:44:56 +08:00
+
+Interim complete-cell audit while the remaining full grid continues:
+
+- Figure 5 Setting 1 at `T=500` has 80 paper-visible cells. At alpha `0.05`
+  and equivalence margin `0.05`, all 80 are equivalent; MAE is `0.00636` and
+  maximum absolute difference is `0.02488`.
+- Figure 6 at `T=500` has all 56 cells complete. At margin `0.05`, 3 are
+  equivalent, 15 are clearly different, and 38 are inconclusive; MAE is
+  `0.05788` and maximum absolute difference is `0.12063`.
+- At the looser margin `0.10`, 51/56 Figure 6 cells are equivalent, four are
+  inconclusive, and one remains clearly different. The sensitivity confirms
+  that the reproduction conclusion depends materially on the declared
+  practical-equivalence threshold.
+- The primary predeclared synthetic margin remains `0.05`; the poorer Figure
+  6 result is not reclassified by selecting the looser margin after seeing
+  the data.
