@@ -291,3 +291,28 @@ references before allowing the multi-day run to continue.
   MAB results were unaffected and retained.
 - Added regression coverage for both contextual noise profiles and the
   released linear-PEVI feature layout. All 17 protocol tests pass.
+
+## 2026-06-06 13:38:33 +08:00
+
+Scope: audited the released adaptive collector after the corrected-noise
+Figure 6 sentinel still differed from the vector reference.
+
+- The first complete maintained-run cell (`setting=1`, `T=500`,
+  `batch_size=10`, pure exploration, 200 repetitions) produced greedy
+  `1.896655` versus paper `1.939495`; fixed-beta PPL differences ranged from
+  `-0.045905` to `-0.065806`.
+- The released `utils/experiment.py` computes deterministic actions for the
+  first batch but never copies them into `agent.ws`, which is the action
+  vector returned to policy learning. Its first 100 entries therefore contain
+  undefined memory.
+- Ran the released `synthetic_linear.py` unchanged for 50 repetitions at the
+  same cell with `beta=1`. It produced greedy `1.384568` and PPL `1.386110`,
+  far from both the paper and the maintained result. This directly confirms
+  that the public script cannot reproduce Figure 6 as released.
+- The maintained collector keeps the valid initial actions in both protocols.
+  Emulating undefined memory was rejected because it worsens agreement,
+  violates the stated experiment, and conflicts with the requirement for
+  bug-free runnable code.
+- Added a regression test that verifies all deterministic first-batch actions
+  and propensities survive collection. The raw sentinel output remains in the
+  ignored audit workspace under `tmp/upstream-original/results/`.

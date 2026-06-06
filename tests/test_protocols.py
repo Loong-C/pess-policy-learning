@@ -32,6 +32,7 @@ from utils.dgp import (
     PublishedMultiQuad,
     generate_bandit_data,
 )
+from utils.experiment import run_experiment
 from utils.thompson import LinTS
 
 
@@ -114,6 +115,19 @@ class ProtocolTests(unittest.TestCase):
             _ts_rep_seed(7, "published", 2, 1000, 10, "0.5", 3),
             expected_rep,
         )
+
+    def test_collector_preserves_deterministic_initial_actions(self):
+        xs = np.linspace(-1, 1, 200).reshape(100, 2)
+        ys = np.zeros((100, 10))
+        logged = run_experiment(
+            xs,
+            ys,
+            batch_sizes=[100],
+            num_mc=10,
+            ridge_mode="cv",
+        )
+        np.testing.assert_array_equal(logged["ws"], np.arange(100) % 10)
+        np.testing.assert_allclose(logged["ps"], 0.1)
 
     def test_equivalence_statistics_distinguish_match_and_difference(self):
         comparison = pd.DataFrame(
