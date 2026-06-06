@@ -3,7 +3,14 @@ import unittest
 import numpy as np
 
 from algs.pess import compute_variance_terms
-from experiments.reproduce import FULL_CONTEXTUAL_T_VALUES, TREE_LINEAR_BETAS, TREE_PESS_BETAS
+from experiments.reproduce import (
+    FULL_CONTEXTUAL_T_VALUES,
+    TREE_LINEAR_BETAS,
+    TREE_PESS_BETAS,
+    _stable_seed,
+    _ts_eval_seed,
+    _ts_rep_seed,
+)
 from utils.compute import apply_floor
 from utils.dgp import MultiLinear, MultiQuad, PublishedMultiLinear, PublishedMultiQuad
 from utils.thompson import LinTS
@@ -51,6 +58,22 @@ class ProtocolTests(unittest.TestCase):
         agent = LinTS(2, 1)
         agent.set_floor(if_floor=True, floor_start=0.5, floor_decay=0.5)
         np.testing.assert_allclose(agent._floor_vector(100), [0.05, 0.05])
+
+    def test_fixed_beta_and_cv_use_the_same_ts_stream(self):
+        expected_eval = _stable_seed(
+            7, "published", "ts_eval", 2, 1000, 10, "0.5", False
+        )
+        expected_rep = _stable_seed(
+            7, "published", "ts", 2, 1000, 10, "0.5", False, 3
+        )
+        self.assertEqual(
+            _ts_eval_seed(7, "published", 2, 1000, 10, "0.5"),
+            expected_eval,
+        )
+        self.assertEqual(
+            _ts_rep_seed(7, "published", 2, 1000, 10, "0.5", 3),
+            expected_rep,
+        )
 
 
 if __name__ == "__main__":

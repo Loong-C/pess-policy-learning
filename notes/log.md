@@ -198,8 +198,12 @@ Changes and validation:
   reconciling the caption, vector paths, legend, and released script.
 - Corrected Figure 9 plotting so all cross-validated runs share one `CV_pess`
   legend entry, while retaining all six fixed-penalty PPL curves.
+- Corrected the queued TS-CV stage to reuse the same synthetic data, Thompson
+  Sampling, and evaluation random streams as the matching fixed-beta cells,
+  as in the released script. The active fixed-beta run already used that key
+  and did not need to be restarted.
 - Added `pytest` to `environment.yml`, installed it in `pess-pl-legacy`, and
-  passed all 7 protocol regression tests.
+  passed all 8 protocol regression tests.
 - Stopped the superseded tree run after 55 incomplete-grid chunks, removed only
   its runtime chunk directory, and restarted it from zero. The concurrent TS
   run was not interrupted.

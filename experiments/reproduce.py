@@ -521,6 +521,36 @@ def _dgp_for_ts(setting: int, protocol: str):
     return quad_class(2, 10, sigma=0.1), quad_class(2, 10, sigma=0)
 
 
+def _ts_eval_seed(seed, protocol, setting, T, batch_size, floor_label):
+    # The released fixed-beta and CV scripts reset to the same random stream.
+    # Keep the historical False slot so this remains identical to fixed-beta
+    # chunks generated before the shared-seed audit.
+    return _stable_seed(
+        seed,
+        protocol,
+        "ts_eval",
+        setting,
+        T,
+        batch_size,
+        floor_label,
+        False,
+    )
+
+
+def _ts_rep_seed(seed, protocol, setting, T, batch_size, floor_label, rep):
+    return _stable_seed(
+        seed,
+        protocol,
+        "ts",
+        setting,
+        T,
+        batch_size,
+        floor_label,
+        False,
+        rep,
+    )
+
+
 def _run_ts_task(task: dict) -> pd.DataFrame:
     cfg = ModeConfig(**task["cfg"])
     protocol = task["protocol"]
@@ -538,12 +568,20 @@ def _run_ts_task(task: dict) -> pd.DataFrame:
     dgp, dgp_eval = _dgp_for_ts(setting, protocol)
     eval_data = dgp_eval.sample_data(
         cfg.t_eval,
-        seed=_stable_seed(seed, protocol, "ts_eval", setting, T, batch_size, floor_label, cv_only),
+        seed=_ts_eval_seed(seed, protocol, setting, T, batch_size, floor_label),
     )
     beta_list = beta_miss if setting == 3 else beta_default
     rows = []
 
-    rep_seed = _stable_seed(seed, protocol, "ts", setting, T, batch_size, floor_label, cv_only, rep)
+    rep_seed = _ts_rep_seed(
+        seed,
+        protocol,
+        setting,
+        T,
+        batch_size,
+        floor_label,
+        rep,
+    )
     data = dgp.sample_data(T, seed=rep_seed)
     batch_sizes = [min(100, T)] + [batch_size] * int((T - min(100, T)) / batch_size)
     np.random.seed(rep_seed + 23)
