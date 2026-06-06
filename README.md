@@ -32,6 +32,10 @@ first-batch actions into the vector later consumed by policy learning. The
 maintained runner repairs that undefined-memory bug in both protocols because
 the valid first batch is required by the stated design and by a usable
 implementation. The raw released script is retained only as audit evidence.
+A forced-upstream 50-run sentinel with only that one-line repair agrees with
+the maintained runner, but both remain about `0.04` below the Figure 6 vector
+for the audited `T=500`, batch-10, pure-exploration cell. This residual
+paper/code mismatch is reported rather than calibrated away.
 
 ## Environment
 

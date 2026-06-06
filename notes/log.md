@@ -305,14 +305,23 @@ Figure 6 sentinel still differed from the vector reference.
   first batch but never copies them into `agent.ws`, which is the action
   vector returned to policy learning. Its first 100 entries therefore contain
   undefined memory.
-- Ran the released `synthetic_linear.py` unchanged for 50 repetitions at the
-  same cell with `beta=1`. It produced greedy `1.384568` and PPL `1.386110`,
-  far from both the paper and the maintained result. This directly confirms
-  that the public script cannot reproduce Figure 6 as released.
+- An initial 50-repetition diagnostic produced greedy `1.384568` and PPL
+  `1.386110`, but a module-path audit showed that Conda had imported this
+  repository's `utils` package instead of the upstream clone. Those values
+  are invalid as upstream evidence and are excluded from all comparisons.
+- Repeated the diagnostic after forcing every `utils` and `algs` import to the
+  upstream clone and applying only the missing first-batch action assignment.
+  The verified 50-run result was greedy `1.885310` and PPL(beta=1)
+  `1.967432`. This agrees with the maintained 200-run result (`1.896655` and
+  `1.963970`) but not the paper vector (`1.939495` and `2.009875`).
+- The raw released script still cannot define a reproducible result because
+  its first 100 actions are uninitialized memory. The verified comparison
+  therefore uses the minimal one-line repair required by the stated design.
 - The maintained collector keeps the valid initial actions in both protocols.
   Emulating undefined memory was rejected because it worsens agreement,
   violates the stated experiment, and conflicts with the requirement for
   bug-free runnable code.
 - Added a regression test that verifies all deterministic first-batch actions
-  and propensities survive collection. The raw sentinel output remains in the
-  ignored audit workspace under `tmp/upstream-original/results/`.
+  and propensities survive collection. The verified fixed-action sentinel
+  remains in the ignored audit workspace under
+  `tmp/upstream-original/results/`.
