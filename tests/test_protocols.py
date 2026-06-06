@@ -14,7 +14,10 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(FULL_CONTEXTUAL_T_VALUES, [500, 1000, 2000, 5000])
 
     def test_tree_beta_grids_match_figure_5(self):
-        self.assertEqual(TREE_PESS_BETAS, [0.1, 0.2, 0.5, 1, 5, 10])
+        self.assertEqual(
+            TREE_PESS_BETAS,
+            [0.0001, 0.001, 0.01, 0.1, 0.2, 0.5, 1, 5, 10],
+        )
         self.assertEqual(TREE_LINEAR_BETAS, [0.0001, 0.001, 0.01, 0.1, 0.2, 0.5, 1, 5, 10])
 
     def test_paper_and_published_quad_formulas_are_distinct(self):

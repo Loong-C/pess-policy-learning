@@ -174,8 +174,36 @@ Validation and current result:
   values. The first published full run was stopped after 14 tree and 24 TS
   chunks; all were T=1000 and remain valid. The corrected grid reduces the
   synthetic task count by 20%.
-- Figure 5 contains six PPL curves (`beta={0.1,0.2,0.5,1,5,10}`) but nine
-  linear-PEVI curves (also including `0.0001,0.001,0.01`). The shared beta list
-  in the first runner revision performed three PPL fits that are absent from
-  the published figure. The early tree queue was stopped at 91 chunks, those
-  runtime chunks were removed, and the corrected tree queue was restarted.
+- Figure 5's caption names six PPL curves, but a later path/color audit showed
+  that the vector figure and released script actually contain nine PPL curves,
+  also including `beta={0.0001,0.001,0.01}`. The first three are clipped out of
+  the Setting 1 panels but are visible in Settings 2-3. The `published` grid
+  therefore uses nine PPL and nine linear-PEVI penalty values.
+
+## 2026-06-06 12:13:22 +08:00
+
+Scope: continued the full published-protocol run and completed numeric
+reference extraction for Figures 5-9.
+
+Changes and validation:
+- Added `experiments/extract_contextual_paper_references.py` and committed
+  vector-derived reference tables for Figures 5-9 (1,944 visible curve points).
+- Added SVG coordinate tolerance and explicit handling for the three Figure 5
+  curves clipped out of the Setting 1 plotting region.
+- Corrected the Figure 5 published grid to nine PPL penalty values after
+  reconciling the caption, vector paths, legend, and released script.
+- Corrected Figure 9 plotting so all cross-validated runs share one `CV_pess`
+  legend entry, while retaining all six fixed-penalty PPL curves.
+- Added `pytest` to `environment.yml`, installed it in `pess-pl-legacy`, and
+  passed all 7 protocol regression tests.
+- Stopped the superseded tree run after 55 incomplete-grid chunks, removed only
+  its runtime chunk directory, and restarted it from zero. The concurrent TS
+  run was not interrupted.
+
+Run status at this checkpoint:
+- Full Figure 4 MAB: complete; 168/168 cells equivalent at alpha 0.05 and
+  margin 0.0025.
+- Full Figure 5 tree run: active with 33/12,000 repetition chunks complete.
+- Full Figures 6-8 TS run: active with 565/19,200 repetition chunks complete.
+- Full Figure 9 TS-CV and Figure 10 real-data runs remain queued behind those
+  two synthetic runs.

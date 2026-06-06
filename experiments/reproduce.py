@@ -40,7 +40,7 @@ from utils.experiment import run_experiment, run_experiment_opt
 ARTIFACT_ROOT = Path("artifacts/reproduction")
 OPENML_CACHE = Path("data/openml")
 FULL_CONTEXTUAL_T_VALUES = [500, 1000, 2000, 5000]
-TREE_PESS_BETAS = [0.1, 0.2, 0.5, 1, 5, 10]
+TREE_PESS_BETAS = [0.0001, 0.001, 0.01, 0.1, 0.2, 0.5, 1, 5, 10]
 TREE_LINEAR_BETAS = [0.0001, 0.001, 0.01, 0.1, 0.2, 0.5, 1, 5, 10]
 openml.config.cache_directory = str(OPENML_CACHE.resolve())
 
@@ -797,7 +797,17 @@ def plot_value_grid(df: pd.DataFrame, path: Path, row: str, col: str):
     if df.empty:
         return
     plot_df = df.copy()
-    plot_df["method_param"] = np.where(plot_df["method"] == "greedy", "greedy", plot_df["method"] + "_" + plot_df["beta"].astype(str))
+    plot_df["method_param"] = np.select(
+        [
+            plot_df["method"] == "greedy",
+            plot_df["method"] == "CV_pess",
+        ],
+        [
+            "greedy",
+            "CV_pess",
+        ],
+        default=plot_df["method"] + "_" + plot_df["beta"].astype(str),
+    )
     summary = plot_df.groupby([row, col, "T", "method_param"], as_index=False)["value"].mean()
     g = sns.relplot(data=summary, x="T", y="value", hue="method_param", row=row, col=col, kind="line", marker="o", height=2.2, aspect=1.0)
     g.figure.tight_layout()

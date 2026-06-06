@@ -21,3 +21,4 @@ dependencies:
   - dill
   - zipp
   - ipykernel
+  - pytest

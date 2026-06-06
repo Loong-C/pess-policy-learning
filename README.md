@@ -14,7 +14,7 @@ This distinction is intentional. It prevents a result from being called
 "faithful" without saying whether that means faithful to the prose/equations or
 to the published numerical assets.
 
-Repairs shared by the two protocols include:
+The `paper-spec` path includes the following literal-specification repairs:
 
 - Algorithm 1 PPL now uses the paper's MM update with the additive `Gamma_s` and `Gamma_p` penalty terms.
 - Algorithm 2 cross-validation now uses consecutive folds and prefix-train/suffix-evaluate splits for adaptive data.
@@ -42,6 +42,8 @@ conda activate pess-pl-legacy
 ```
 
 This environment has been tested with Python dependencies, R `policytree`/`grf`, editable installation, and Python-to-R policy-tree calls.
+It also includes `pytest`; the protocol regression suite runs with
+`python -m pytest -q tests/test_protocols.py`.
 
 ## Data
 
@@ -112,6 +114,20 @@ python experiments/compare_to_paper.py \
 
 `experiments/extract_mab_paper_reference.py` extracts Figure 4 means and
 uncertainty from the arXiv vector PDF after conversion with `pdftocairo -svg`.
+`experiments/extract_contextual_paper_references.py` similarly extracts the
+curve coordinates for Figures 5-9:
+
+```bash
+python experiments/extract_contextual_paper_references.py \
+  --source-dir tmp/arxiv-2212.09900/figs \
+  --figure all \
+  --out-dir artifacts/reproduction/paper_reference
+```
+
+Figure 5's caption names six penalty values, but its vector paths and the
+released experiment script contain three additional PPL values
+(`0.0001`, `0.001`, and `0.01`). The `published` protocol follows those
+numerical assets; the discrepancy is retained in the audit log.
 The comparison script uses a two one-sided tests equivalence check. An
 equivalence margin and significance level must be declared before interpreting
 the result.
