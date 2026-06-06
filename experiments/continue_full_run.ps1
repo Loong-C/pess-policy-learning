@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory = $true)]
     [int]$TsProcessId,
     [string]$CondaExe = "D:\Users\hp\anaconda3\Scripts\conda.exe",
-    [string]$Seed = "20260605"
+    [string]$Seed = "20260605",
+    [int]$RealJobs = 4
 )
 
 $ErrorActionPreference = "Stop"
@@ -67,5 +68,5 @@ Wait-Process -Id $TreeProcessId, $TsProcessId -ErrorAction SilentlyContinue
 Write-Status "tree and TS parent processes finished"
 
 Invoke-ReproductionPhase -Experiment "ts-cv" -Jobs 20
-Invoke-ReproductionPhase -Experiment "real" -Jobs 2
+Invoke-ReproductionPhase -Experiment "real" -Jobs $RealJobs
 Write-Status "all scheduled full reproduction phases finished"

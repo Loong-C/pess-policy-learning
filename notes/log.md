@@ -325,3 +325,17 @@ Figure 6 sentinel still differed from the vector reference.
   and propensities survive collection. The verified fixed-action sentinel
   remains in the ignored audit workspace under
   `tmp/upstream-original/results/`.
+
+## 2026-06-06 14:18:17 +08:00
+
+- Added a fail-fast completeness check to the chunk runner. A phase now exits
+  nonzero whenever any requested task lacks a CSV chunk, rather than silently
+  continuing after writing `errors.jsonl`.
+- Added regression coverage for failed chunks and for preservation of all
+  deterministic first-batch actions; 19 protocol tests pass.
+- Restarted both full synthetic phases with `--resume` after loading the new
+  guard. They retained 329 tree and 355 TS chunks, and their fresh error logs
+  remain empty.
+- Increased the queued Figure 10 real-data stage from two to four workers.
+  This remains conservative for the 20,000-row cap and will run only after
+  both synthetic phases and Figure 9 have released their memory.

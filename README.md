@@ -86,7 +86,7 @@ Available experiments are `mab`, `tree`, `ts`, `ts-cv`, `real`, and `all`. Slow 
 ```bash
 python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 20 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 20 --resume --seed 20260605
-python experiments/reproduce.py --mode full --protocol published --experiment real --jobs 2 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment real --jobs 4 --resume --seed 20260605
 ```
 
 Completed chunks are written below
@@ -100,7 +100,7 @@ python experiments/reproduce.py --mode full --protocol published --experiment ma
 python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 20 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 20 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment ts-cv --jobs 20 --resume --seed 20260605
-python experiments/reproduce.py --mode full --protocol published --experiment real --jobs 2 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment real --jobs 4 --resume --seed 20260605
 ```
 
 The old script names in `experiments/` remain as compatibility wrappers and delegate to `experiments/reproduce.py`.
