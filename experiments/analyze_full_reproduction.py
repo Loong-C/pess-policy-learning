@@ -312,6 +312,14 @@ def _paired_tost(diff: pd.Series, margin: float, alpha: float) -> dict:
     }
 
 
+def _cluster_mean_differences(
+    comparison: pd.DataFrame,
+    cluster: str,
+) -> pd.Series:
+    """Reduce repeated panel measurements to independent cluster means."""
+    return comparison.groupby(cluster, dropna=False)["diff"].mean()
+
+
 def analyze_real(
     root: Path,
     reference_root: Path,
@@ -337,8 +345,9 @@ def analyze_real(
     )
 
     summaries = []
+    dataset_differences = _cluster_mean_differences(comparison, "dataset")
     for margin in REAL_MARGINS:
-        paired = _paired_tost(comparison["diff"], margin, alpha)
+        paired = _paired_tost(dataset_differences, margin, alpha)
         within = int((comparison["diff"].abs() <= margin).sum())
         summaries.append(
             {
@@ -359,6 +368,7 @@ def analyze_real(
                 "all_cells_equivalent": np.nan,
                 "paired_tost_p": paired["tost_p"],
                 "paired_mean_equivalent": paired["equivalent"],
+                "paired_cluster_count": paired["count"],
                 "paired_ci90_low": paired["ci90_low"],
                 "paired_ci90_high": paired["ci90_high"],
                 "descriptive_cells_within_margin": within,
@@ -418,7 +428,7 @@ def _plot_synthetic_agreement(
         np.asarray(limits) + 0.05,
         color="#cccccc",
         alpha=0.25,
-        label="±0.05",
+        label="+/- 0.05",
     )
     ax.set(
         xlabel="Paper value",

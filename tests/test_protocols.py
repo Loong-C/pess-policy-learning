@@ -7,6 +7,7 @@ import pandas as pd
 
 from algs.pess import compute_variance_terms
 from experiments.analyze_full_reproduction import (
+    _cluster_mean_differences,
     _paired_tost,
     add_equivalence_statistics,
 )
@@ -150,6 +151,18 @@ class ProtocolTests(unittest.TestCase):
         self.assertTrue(result["equivalent"])
         self.assertLess(result["ci90_low"], result["mean_diff"])
         self.assertGreater(result["ci90_high"], result["mean_diff"])
+
+    def test_real_comparison_clusters_repeated_dataset_panels(self):
+        comparison = pd.DataFrame(
+            {
+                "dataset": ["a", "a", "b", "b"],
+                "diff": [0.01, 0.03, -0.02, 0.02],
+            }
+        )
+        clustered = _cluster_mean_differences(comparison, "dataset")
+        self.assertEqual(len(clustered), 2)
+        self.assertAlmostEqual(clustered.loc["a"], 0.02)
+        self.assertAlmostEqual(clustered.loc["b"], 0.0)
 
     def test_linear_pevi_grid_matches_single_beta_evaluation(self):
         model = (
