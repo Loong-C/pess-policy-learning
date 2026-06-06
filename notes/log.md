@@ -268,3 +268,26 @@ algorithm or any completed result.
   `{0.1,0.5,1,2,5,10}`, and no artificial floor for pure exploration.
   `paper-spec` retains the appendix's 33 datasets, reward signal 1, and the
   eight candidates stated in Section 7.3. Fifteen regression tests pass.
+
+## 2026-06-06 13:19:29 +08:00
+
+Scope: audited the first complete Figure 5-6 cells against the vector
+references before allowing the multi-day run to continue.
+
+- The sentinel comparison found systematic positive differences, generally
+  about `0.04-0.12` for greedy policies and `0.02-0.08` for PPL in Figure 6.
+- The root cause is a material paper/code discrepancy. Sections 7.1.2-7.2
+  specify `epsilon ~ N(0, 0.1^2)`, but the released Figure 5-9 scripts omit
+  the DGP `sigma` argument and therefore use the class default `sigma=1`.
+- The runner now uses `sigma=1` for `published` and `sigma=0.1` for
+  `paper-spec`, preserving both targets explicitly.
+- The released Figure 5 linear-PEVI implementation uses `(1, x1, x2)` for
+  each action even though the paper describes a 20-dimensional feature using
+  `(1, x)`. The published protocol now follows the released three-feature
+  action blocks; paper-spec retains the displayed 20-dimensional definition.
+- Stopped the continuation scheduler before both active workers. Removed only
+  the invalid published full-run directories: 845 tree chunks, 1,634 fixed-TS
+  chunks, and 227 prematurely generated TS-CV chunks. The complete Figure 4
+  MAB results were unaffected and retained.
+- Added regression coverage for both contextual noise profiles and the
+  released linear-PEVI feature layout. All 17 protocol tests pass.

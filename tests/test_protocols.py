@@ -14,6 +14,7 @@ from experiments.reproduce import (
     PUBLISHED_REAL_DATASETS,
     TREE_LINEAR_BETAS,
     TREE_PESS_BETAS,
+    _contextual_noise_sigma,
     _real_grid,
     _stable_seed,
     _cached_eval_data,
@@ -21,6 +22,7 @@ from experiments.reproduce import (
     _ts_rep_seed,
     eval_linear_pevi,
     eval_linear_pevi_grid,
+    fit_linear_pevi,
 )
 from utils.compute import apply_floor
 from utils.dgp import (
@@ -57,6 +59,10 @@ class ProtocolTests(unittest.TestCase):
         published = PublishedMultiLinear(2, 3, sigma=0).mean(xs)
         np.testing.assert_allclose(paper[0], [3.0, 2.5, 2.0])
         np.testing.assert_allclose(published[0], [0.0, 1.0, 2.0])
+
+    def test_contextual_noise_matches_each_reproduction_target(self):
+        self.assertEqual(_contextual_noise_sigma("published"), 1.0)
+        self.assertEqual(_contextual_noise_sigma("paper-spec"), 0.1)
 
     def test_displayed_algorithm_variance_terms(self):
         propensities = np.array([[0.25, 0.75], [0.5, 0.5]])
@@ -141,6 +147,23 @@ class ProtocolTests(unittest.TestCase):
         for beta in [0.1, 1.0]:
             _, _, expected = eval_linear_pevi(model, eval_data, beta)
             self.assertAlmostEqual(grid[beta], expected)
+
+    def test_published_linear_pevi_uses_all_covariates(self):
+        xs = np.array(
+            [[-1.0, 0.5], [0.0, -0.5], [1.0, 1.5], [2.0, -1.5]]
+        )
+        arms = np.array([0, 1, 0, 1])
+        outcomes = np.array([0.1, 0.2, 0.8, 1.0])
+        theta, inv_gram, feature_count = fit_linear_pevi(
+            xs,
+            outcomes,
+            arms,
+            arm_count=2,
+            feature_count=2,
+        )
+        self.assertEqual(feature_count, 2)
+        self.assertEqual(theta.shape, (6,))
+        self.assertEqual(inv_gram.shape, (6, 6))
 
     def test_worker_eval_cache_reuses_matching_key(self):
         calls = []

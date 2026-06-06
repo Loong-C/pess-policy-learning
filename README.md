@@ -23,6 +23,11 @@ The `paper-spec` path includes the following literal-specification repairs:
 - The Section 7.1.2 linear PEVI baseline is included.
 - The paper-spec real-data list contains all 33 appendix datasets, including `skin-segmentation`.
 
+One especially consequential discrepancy is the contextual reward noise.
+Sections 7.1.2-7.2 state `epsilon ~ N(0, 0.1^2)`, while the released
+Figure 5-9 scripts instantiate DGP classes whose default is `sigma=1`.
+Accordingly, `published` uses `sigma=1` and `paper-spec` uses `sigma=0.1`.
+
 ## Environment
 
 The working local environment is captured in `environment.yml`:

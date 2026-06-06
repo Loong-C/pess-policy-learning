@@ -429,44 +429,56 @@ def _contextual_propensities(muxs, setting: int, decay: float | None):
     return ps
 
 
-def _linear_pevi_design(xs: np.ndarray, arms: np.ndarray, arm_count: int) -> np.ndarray:
-    """Action-block features from Section 7.1.2: (1, x_1) for each arm."""
+def _linear_pevi_design(
+    xs: np.ndarray,
+    arms: np.ndarray,
+    arm_count: int,
+    feature_count: int = 1,
+) -> np.ndarray:
+    """Build action-block features for the paper or released linear baseline."""
     xs = np.asarray(xs, dtype=float)
     arms = np.asarray(arms, dtype=int).reshape(-1)
-    design = np.zeros((xs.shape[0], 2 * arm_count), dtype=float)
+    feature_count = int(feature_count)
+    block_size = feature_count + 1
+    design = np.zeros((xs.shape[0], block_size * arm_count), dtype=float)
     rows = np.arange(xs.shape[0])
-    design[rows, 2 * arms] = 1.0
-    design[rows, 2 * arms + 1] = xs[:, 0]
+    offsets = block_size * arms
+    design[rows, offsets] = 1.0
+    for feature_idx in range(feature_count):
+        design[rows, offsets + feature_idx + 1] = xs[:, feature_idx]
     return design
 
 
-def fit_linear_pevi(xs, yobs, wws, arm_count: int, ridge: float = 1.0):
+def fit_linear_pevi(
+    xs,
+    yobs,
+    wws,
+    arm_count: int,
+    ridge: float = 1.0,
+    feature_count: int = 1,
+):
     """Ridge fitted linear PEVI baseline from Jin et al. (2021)."""
-    design = _linear_pevi_design(xs, wws, arm_count)
+    design = _linear_pevi_design(
+        xs,
+        wws,
+        arm_count,
+        feature_count=feature_count,
+    )
     gram = design.T @ design + float(ridge) * np.eye(design.shape[1])
     theta = np.linalg.solve(gram, design.T @ np.asarray(yobs, dtype=float))
     inv_gram = np.linalg.pinv(gram)
-    return theta, inv_gram
+    return theta, inv_gram, int(feature_count)
+
+
+def _unpack_linear_pevi(model):
+    if len(model) == 2:
+        theta, inv_gram = model
+        return theta, inv_gram, 1
+    return model
 
 
 def eval_linear_pevi(model, eval_data, beta: float) -> tuple[np.ndarray, np.ndarray, float]:
-    theta, inv_gram = model
-    xs = np.asarray(eval_data["xs"], dtype=float)
-    ys = np.asarray(eval_data["ys"], dtype=float)
-    arm_count = ys.shape[1]
-    scores = np.zeros((xs.shape[0], arm_count), dtype=float)
-    uncertainty = np.zeros_like(scores)
-    for arm in range(arm_count):
-        feat = _linear_pevi_design(xs, np.full(xs.shape[0], arm, dtype=int), arm_count)
-        scores[:, arm] = feat @ theta
-        uncertainty[:, arm] = np.sqrt(np.maximum(np.einsum("ij,jk,ik->i", feat, inv_gram, feat), 0.0))
-    pred = np.argmax(scores - float(beta) * uncertainty, axis=1)
-    rewards = ys[np.arange(ys.shape[0]), pred]
-    return pred, rewards, float(np.mean(rewards))
-
-
-def eval_linear_pevi_grid(model, eval_data, betas) -> dict[float, float]:
-    theta, inv_gram = model
+    theta, inv_gram, feature_count = _unpack_linear_pevi(model)
     xs = np.asarray(eval_data["xs"], dtype=float)
     ys = np.asarray(eval_data["ys"], dtype=float)
     arm_count = ys.shape[1]
@@ -477,6 +489,28 @@ def eval_linear_pevi_grid(model, eval_data, betas) -> dict[float, float]:
             xs,
             np.full(xs.shape[0], arm, dtype=int),
             arm_count,
+            feature_count=feature_count,
+        )
+        scores[:, arm] = feat @ theta
+        uncertainty[:, arm] = np.sqrt(np.maximum(np.einsum("ij,jk,ik->i", feat, inv_gram, feat), 0.0))
+    pred = np.argmax(scores - float(beta) * uncertainty, axis=1)
+    rewards = ys[np.arange(ys.shape[0]), pred]
+    return pred, rewards, float(np.mean(rewards))
+
+
+def eval_linear_pevi_grid(model, eval_data, betas) -> dict[float, float]:
+    theta, inv_gram, feature_count = _unpack_linear_pevi(model)
+    xs = np.asarray(eval_data["xs"], dtype=float)
+    ys = np.asarray(eval_data["ys"], dtype=float)
+    arm_count = ys.shape[1]
+    scores = np.zeros((xs.shape[0], arm_count), dtype=float)
+    uncertainty = np.zeros_like(scores)
+    for arm in range(arm_count):
+        feat = _linear_pevi_design(
+            xs,
+            np.full(xs.shape[0], arm, dtype=int),
+            arm_count,
+            feature_count=feature_count,
         )
         scores[:, arm] = feat @ theta
         uncertainty[:, arm] = np.sqrt(
@@ -518,7 +552,7 @@ def _run_contextual_task(task: dict) -> pd.DataFrame:
 
     rep_seed = _stable_seed(seed, protocol, "tree", scenario, T, decay_label, rep)
     rep_rng = np.random.default_rng(rep_seed + 17)
-    dgp = dgp_class(2, 10, sigma=0.1)
+    dgp = dgp_class(2, 10, sigma=_contextual_noise_sigma(protocol))
     data = dgp.sample_data(T, seed=rep_seed)
     xs, ys, muxs = data["xs"], data["ys"], data["muxs"]
     ps = _contextual_propensities(muxs, scenario, decay)
@@ -528,7 +562,13 @@ def _run_contextual_task(task: dict) -> pd.DataFrame:
     greedy = PL_greedy(xs, yobs, ws, ps, depth=5)
     _, _, rw_greedy = eval_ptree(greedy, eval_data)
     rows.append({"experiment": "tree", "scenario": scenario, "T": T, "decay": decay_label, "rep": rep, "method": "greedy", "beta": 0.0, "value": rw_greedy})
-    lin_model = fit_linear_pevi(xs, yobs, ws, arm_count=10)
+    lin_model = fit_linear_pevi(
+        xs,
+        yobs,
+        ws,
+        arm_count=10,
+        feature_count=xs.shape[1] if protocol == "published" else 1,
+    )
     linear_values = eval_linear_pevi_grid(
         lin_model, eval_data, TREE_LINEAR_BETAS
     )
@@ -600,9 +640,18 @@ def run_contextual_nonadaptive(
 def _dgp_for_ts(setting: int, protocol: str):
     linear_class = PublishedMultiLinear if protocol == "published" else MultiLinear
     quad_class = PublishedMultiQuad if protocol == "published" else MultiQuad
+    sigma = _contextual_noise_sigma(protocol)
     if setting == 1:
-        return linear_class(2, 10, sigma=0.1), linear_class(2, 10, sigma=0)
-    return quad_class(2, 10, sigma=0.1), quad_class(2, 10, sigma=0)
+        return linear_class(2, 10, sigma=sigma), linear_class(2, 10, sigma=0)
+    return quad_class(2, 10, sigma=sigma), quad_class(2, 10, sigma=0)
+
+
+def _contextual_noise_sigma(protocol: str) -> float:
+    """Return the training-noise scale for the selected reproduction target."""
+    if protocol == "published":
+        # The released scripts rely on the DGP classes' default sigma=1.
+        return 1.0
+    return 0.1
 
 
 def _ts_eval_seed(seed, protocol, setting, T, batch_size, floor_label):
