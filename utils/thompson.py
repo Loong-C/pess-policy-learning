@@ -65,7 +65,13 @@ class LinTS:
         residual = y_arm - model.predict(X_arm)
         sigma2 = float(np.var(residual)) if len(residual) > 1 else 1.0
         gram = X_design.T @ X_design + ridge_alpha * np.eye(self.p + 1)
-        self.V[arm] = sigma2 * np.linalg.pinv(gram) + 1e-8 * np.eye(self.p + 1)
+        if self.ridge_mode == "cv":
+            self.V[arm] = sigma2 * np.linalg.inv(gram)
+        else:
+            self.V[arm] = (
+                sigma2 * np.linalg.pinv(gram)
+                + 1e-8 * np.eye(self.p + 1)
+            )
 
     def update_TS(self, xss, wss, yss):
         wss = np.asarray(wss, dtype=int)

@@ -254,3 +254,9 @@ algorithm or any completed result.
   was stopped immediately after producing 227 valid resumable chunks. Those
   chunks were retained; the replacement scheduler is waiting on the active
   tree and TS parents as intended.
+- Restored the exact released RidgeCV posterior covariance
+  `sigma^2 * inv(X'X + alpha I)` for the published protocol, removing a
+  cleanup-era `1e-8 I` jitter. Recomputed `floor=0.2`, `floor=0.8`, and pure
+  Figure 6 chunks differed from existing CSV values by at most `4.44e-16`, so
+  all TS chunks remained valid. The scheduler was stopped first, then only the
+  TS parent was restarted at 1,254 completed chunks.

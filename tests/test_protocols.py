@@ -67,6 +67,23 @@ class ProtocolTests(unittest.TestCase):
         agent.set_floor(if_floor=True, floor_start=0.5, floor_decay=0.5)
         np.testing.assert_allclose(agent._floor_vector(100), [0.05, 0.05])
 
+    def test_published_ridge_covariance_has_no_artificial_jitter(self):
+        agent = LinTS(1, 1, ridge_mode="cv")
+        xs = np.array([[-1.0], [0.0], [1.0], [2.0]])
+        ys = np.array([0.0, 0.2, 0.8, 1.1])
+        agent.update_TS(xs, np.zeros(len(xs), dtype=int), ys)
+        design = np.column_stack([np.ones(len(xs)), xs])
+        # Refit through RidgeCV to recover the selected alpha directly.
+        from sklearn.linear_model import RidgeCV
+
+        model = RidgeCV(
+            alphas=[1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1.0],
+            fit_intercept=True,
+        ).fit(xs, ys)
+        gram = design.T @ design + model.alpha_ * np.eye(2)
+        expected = np.var(ys - model.predict(xs)) * np.linalg.inv(gram)
+        np.testing.assert_allclose(agent.V[0], expected)
+
     def test_fixed_beta_and_cv_use_the_same_ts_stream(self):
         expected_eval = _stable_seed(
             7, "published", "ts_eval", 2, 1000, 10, "0.5", False
