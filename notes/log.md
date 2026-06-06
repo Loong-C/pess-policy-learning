@@ -359,3 +359,26 @@ Interim complete-cell audit while the remaining full grid continues:
 - The primary predeclared synthetic margin remains `0.05`; the poorer Figure
   6 result is not reclassified by selecting the looser margin after seeing
   the data.
+
+## 2026-06-06 16:17:08 +08:00
+
+- Increased the two active synthetic pools from 20 to 28 workers each after
+  measuring 28 logical processors, 8.7 GB free memory, and only about 49% CPU
+  utilization with the previous allocation. The restart retained 1,300 tree
+  and 2,037 TS chunks.
+- The 28+28 allocation reaches full CPU utilization while keeping more than
+  5 GB physical memory available. Its completion-time balance is better:
+  fixed TS remains about 1.6-1.7 times faster per chunk, close to the ratio of
+  its remaining task count to the tree task count.
+- Added `experiments/write_reproduction_report_zh.py`. It replaces the
+  mojibake legacy report with a reproducible UTF-8 Chinese report generated
+  directly from final equivalence tables, including the predeclared verdict,
+  sensitivity table, clustered Figure 10 inference, protocol discrepancies,
+  and asset paths.
+- Changed the continuation scheduler to call the environment Python directly
+  with explicit `R_HOME`, `PYTHONPATH`, and environment library paths. This
+  avoids a delayed Figure 9/10 launch depending on the Conda CLI, which showed
+  intermittent Windows known-folder/plugin initialization failures under
+  full load.
+- Verified the direct environment path can import R `policytree` and run the
+  reproduction CLI. All 21 protocol/report regression tests pass.

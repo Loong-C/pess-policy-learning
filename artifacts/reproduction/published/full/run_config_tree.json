@@ -3,7 +3,7 @@
   "protocol": "published",
   "experiment": "tree",
   "seed": 20260605,
-  "jobs": 20,
+  "jobs": 28,
   "resume": true,
   "config": {
     "mode": "full",

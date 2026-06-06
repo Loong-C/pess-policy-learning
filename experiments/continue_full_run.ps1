@@ -3,7 +3,7 @@ param(
     [int]$TreeProcessId,
     [Parameter(Mandatory = $true)]
     [int]$TsProcessId,
-    [string]$CondaExe = "D:\Users\hp\anaconda3\Scripts\conda.exe",
+    [string]$PythonExe = "D:\Users\hp\anaconda3\envs\pess-pl-legacy\python.exe",
     [string]$Seed = "20260605",
     [int]$RealJobs = 4
 )
@@ -29,6 +29,20 @@ $repo = Split-Path -Parent $PSScriptRoot
 $logDir = Join-Path $repo "artifacts\reproduction\published\full\logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $statusPath = Join-Path $logDir "continuation.status.log"
+$envRoot = Split-Path -Parent $PythonExe
+$env:CONDA_PREFIX = $envRoot
+$env:R_HOME = Join-Path $envRoot "Lib\R"
+$env:PYTHONPATH = $repo
+$env:PATH = (
+    "$envRoot;" +
+    "$envRoot\Library\mingw-w64\bin;" +
+    "$envRoot\Library\usr\bin;" +
+    "$envRoot\Library\bin;" +
+    "$envRoot\Scripts;" +
+    "$envRoot\bin;" +
+    "$envRoot\Lib\R\bin\x64;" +
+    $env:PATH
+)
 
 function Write-Status([string]$Message) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz"
@@ -42,14 +56,14 @@ function Invoke-ReproductionPhase(
     $stdout = Join-Path $logDir "$Experiment.out.log"
     $stderr = Join-Path $logDir "$Experiment.err.log"
     $arguments = @(
-        "run", "-n", "pess-pl-legacy", "python", "experiments\reproduce.py",
+        "experiments\reproduce.py",
         "--mode", "full", "--protocol", "published",
         "--experiment", $Experiment, "--jobs", "$Jobs",
         "--resume", "--seed", $Seed
     )
     Write-Status "starting $Experiment with $Jobs workers"
     $process = Start-Process `
-        -FilePath $CondaExe `
+        -FilePath $PythonExe `
         -ArgumentList $arguments `
         -WorkingDirectory $repo `
         -RedirectStandardOutput $stdout `

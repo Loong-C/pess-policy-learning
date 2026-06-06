@@ -84,8 +84,8 @@ python experiments/reproduce.py --mode quick --protocol published --experiment a
 Available experiments are `mab`, `tree`, `ts`, `ts-cv`, `real`, and `all`. Slow experiments support chunk-level parallelism and resume:
 
 ```bash
-python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 20 --resume --seed 20260605
-python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 20 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 28 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 28 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment real --jobs 4 --resume --seed 20260605
 ```
 
@@ -93,12 +93,16 @@ Completed chunks are written below
 `artifacts/reproduction/<protocol>/<mode>/data/chunks/`; rerunning with
 `--resume` skips chunks already on disk.
 
+The continuation scheduler calls the environment's Python executable directly
+and sets `R_HOME`, `PYTHONPATH`, and the environment library paths itself.
+This avoids making multi-day runs depend on a later Conda CLI initialization.
+
 `quick` mode is a smoke-test mode that keeps runtime manageable. `full` mode keeps the paper-scale settings where feasible:
 
 ```bash
 python experiments/reproduce.py --mode full --protocol published --experiment mab --seed 20260605
-python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 20 --resume --seed 20260605
-python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 20 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 28 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 28 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment ts-cv --jobs 40 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment real --jobs 4 --resume --seed 20260605
 ```

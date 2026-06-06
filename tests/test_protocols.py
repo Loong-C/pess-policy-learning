@@ -28,6 +28,10 @@ from experiments.reproduce import (
     eval_linear_pevi_grid,
     fit_linear_pevi,
 )
+from experiments.write_reproduction_report_zh import (
+    _overall_verdict,
+    _primary_rows,
+)
 from utils.compute import apply_floor
 from utils.dgp import (
     MultiLinear,
@@ -222,6 +226,31 @@ class ProtocolTests(unittest.TestCase):
                     jobs=1,
                 )
             self.assertTrue((root / "chunks" / "errors.jsonl").exists())
+
+    def test_report_requires_every_primary_figure(self):
+        summary = pd.DataFrame(
+            [
+                {
+                    "figure": figure,
+                    "margin": margin,
+                    "all_cells_equivalent": True,
+                    "paired_mean_equivalent": True,
+                }
+                for figure, margin in {
+                    4: 0.0025,
+                    5: 0.05,
+                    6: 0.05,
+                    7: 0.05,
+                    8: 0.05,
+                    9: 0.05,
+                    10: 0.02,
+                }.items()
+            ]
+        )
+        primary = _primary_rows(summary)
+        verdict = _overall_verdict(primary)
+        self.assertEqual(len(primary), 7)
+        self.assertTrue(verdict.endswith("\u3002"))
 
     def test_published_real_grid_matches_released_script(self):
         betas, settings, datasets, batches, _, _ = _real_grid(
