@@ -3,12 +3,16 @@ import unittest
 import numpy as np
 
 from algs.pess import compute_variance_terms
+from experiments.reproduce import FULL_CONTEXTUAL_T_VALUES
 from utils.compute import apply_floor
 from utils.dgp import MultiLinear, MultiQuad, PublishedMultiLinear, PublishedMultiQuad
 from utils.thompson import LinTS
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_published_contextual_sample_size_grid(self):
+        self.assertEqual(FULL_CONTEXTUAL_T_VALUES, [500, 1000, 2000, 5000])
+
     def test_paper_and_published_quad_formulas_are_distinct(self):
         xs = np.array([[2.0, 0.0], [0.0, 0.0]])
         paper = MultiQuad(2, 3, sigma=0).mean(xs)

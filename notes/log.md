@@ -168,3 +168,9 @@ Validation and current result:
 - The stopped paper-spec partial run had produced 173 tree and 214 TS chunks.
   Those chunks remain isolated in the old ignored runtime directory and are not
   used by the published-protocol run.
+- A subsequent vector-coordinate audit of Figures 5-9 showed that their four
+  sample sizes are `T={500,1000,2000,5000}` (x-axis positions
+  `0.5,1,2,5` thousand), not the previously configured five equally spaced
+  values. The first published full run was stopped after 14 tree and 24 TS
+  chunks; all were T=1000 and remain valid. The corrected grid reduces the
+  synthetic task count by 20%.

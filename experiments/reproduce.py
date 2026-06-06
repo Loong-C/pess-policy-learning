@@ -39,6 +39,7 @@ from utils.experiment import run_experiment, run_experiment_opt
 
 ARTIFACT_ROOT = Path("artifacts/reproduction")
 OPENML_CACHE = Path("data/openml")
+FULL_CONTEXTUAL_T_VALUES = [500, 1000, 2000, 5000]
 openml.config.cache_directory = str(OPENML_CACHE.resolve())
 
 MAB_SETTINGS = {
@@ -476,7 +477,7 @@ def run_contextual_nonadaptive(
 ) -> pd.DataFrame:
     cfg = mode_config(mode)
     outdir = outdir_for(mode, protocol)
-    t_list = [1000, 2000, 3000, 4000, 5000] if mode == "full" else [300, 600]
+    t_list = FULL_CONTEXTUAL_T_VALUES if mode == "full" else [300, 600]
     decays = [0.2, 0.4, 0.6, 0.8, None] if mode == "full" else [0.5, None]
     tasks = []
     for scenario in [1, 2, 3]:
@@ -598,7 +599,7 @@ def run_ts_synthetic(
 ) -> pd.DataFrame:
     cfg = mode_config(mode)
     outdir = outdir_for(mode, protocol)
-    t_list = [1000, 2000, 3000, 4000, 5000] if mode == "full" else [300, 600]
+    t_list = FULL_CONTEXTUAL_T_VALUES if mode == "full" else [300, 600]
     if protocol == "published":
         floor_settings = [("pure", 0.0, 0.001), ("0.2", 0.2, 0.1), ("0.5", 0.5, 0.1), ("0.8", 0.8, 0.1)]
     else:
