@@ -411,3 +411,9 @@ Interim complete-cell audit while the remaining full grid continues:
   the `T=500` slice, so it is aggregate-equivalent but not pointwise complete.
 - Re-ran the complete suite after the clustered-inference change: 21 tests
   pass.
+- At `T=2000`, the 32-tree/24-TS allocation used about 20.3 GB across Python
+  workers and briefly left only 2.3 GB physical memory free. Before the tree
+  phase crossed into its first `T=5000` cell, stopped only the scheduler and
+  tree parent, retained 2,979 completed tree chunks, and restarted the tree
+  pool with 16 workers. The 24-worker TS pool was uninterrupted. Available
+  memory returned to about 9.8 GB with CPU still fully utilized.

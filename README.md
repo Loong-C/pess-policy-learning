@@ -84,7 +84,7 @@ python experiments/reproduce.py --mode quick --protocol published --experiment a
 Available experiments are `mab`, `tree`, `ts`, `ts-cv`, `real`, and `all`. Slow experiments support chunk-level parallelism and resume:
 
 ```bash
-python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 32 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 16 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 24 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment real --jobs 4 --resume --seed 20260605
 ```
@@ -100,11 +100,16 @@ After the queued TS-CV and real-data phases finish, it also runs the complete
 equivalence analysis, writes the Chinese report, and executes the protocol
 regression suite.
 
+Worker counts are a memory-aware operating point for this machine. The tree
+pool is reduced before `T=5000` cells because each R policy-tree worker grows
+substantially with the training sample size; `--resume` preserves all chunks
+when changing concurrency.
+
 `quick` mode is a smoke-test mode that keeps runtime manageable. `full` mode keeps the paper-scale settings where feasible:
 
 ```bash
 python experiments/reproduce.py --mode full --protocol published --experiment mab --seed 20260605
-python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 32 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 16 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 24 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment ts-cv --jobs 40 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment real --jobs 4 --resume --seed 20260605
