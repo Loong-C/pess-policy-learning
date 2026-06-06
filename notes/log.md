@@ -246,3 +246,11 @@ algorithm or any completed result.
 - The additional evaluation/linear cache was also checked against a completed
   Figure 5 chunk (`max_abs_diff=2.22e-16`) and loaded through a second resumable
   worker restart at 360 tree and 1,077 TS chunks.
+- Added a per-process Windows execution-state request to the continuation
+  scheduler so the machine does not enter automatic sleep during the long run;
+  no global power-plan setting is changed.
+- During the final worker restart, the old scheduler briefly observed both
+  parent PIDs as stopped and launched TS-CV early. The orphaned 20-worker group
+  was stopped immediately after producing 227 valid resumable chunks. Those
+  chunks were retained; the replacement scheduler is waiting on the active
+  tree and TS parents as intended.

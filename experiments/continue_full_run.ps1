@@ -8,6 +8,22 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class ReproductionPowerState {
+    [DllImport("kernel32.dll")]
+    public static extern uint SetThreadExecutionState(uint flags);
+}
+"@
+
+$ES_CONTINUOUS = [Convert]::ToUInt32("80000000", 16)
+$ES_SYSTEM_REQUIRED = [uint32]0x00000001
+[ReproductionPowerState]::SetThreadExecutionState(
+    $ES_CONTINUOUS -bor $ES_SYSTEM_REQUIRED
+) | Out-Null
+
 $repo = Split-Path -Parent $PSScriptRoot
 $logDir = Join-Path $repo "artifacts\reproduction\published\full\logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null

@@ -1,0 +1,17 @@
+{
+  "mode": "full",
+  "protocol": "published",
+  "experiment": "ts-cv",
+  "seed": 20260605,
+  "jobs": 20,
+  "resume": true,
+  "config": {
+    "mode": "full",
+    "mab_nrep": 1000,
+    "tree_nrep": 200,
+    "ts_nrep": 200,
+    "real_nrep": 1,
+    "t_eval": 100000,
+    "num_mc": 1000
+  }
+}
