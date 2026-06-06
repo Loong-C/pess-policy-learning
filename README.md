@@ -84,8 +84,8 @@ python experiments/reproduce.py --mode quick --protocol published --experiment a
 Available experiments are `mab`, `tree`, `ts`, `ts-cv`, `real`, and `all`. Slow experiments support chunk-level parallelism and resume:
 
 ```bash
-python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 28 --resume --seed 20260605
-python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 28 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 32 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 24 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment real --jobs 4 --resume --seed 20260605
 ```
 
@@ -101,8 +101,8 @@ This avoids making multi-day runs depend on a later Conda CLI initialization.
 
 ```bash
 python experiments/reproduce.py --mode full --protocol published --experiment mab --seed 20260605
-python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 28 --resume --seed 20260605
-python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 28 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 32 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 24 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment ts-cv --jobs 40 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment real --jobs 4 --resume --seed 20260605
 ```

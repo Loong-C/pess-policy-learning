@@ -3,7 +3,7 @@
   "protocol": "published",
   "experiment": "ts",
   "seed": 20260605,
-  "jobs": 28,
+  "jobs": 24,
   "resume": true,
   "config": {
     "mode": "full",

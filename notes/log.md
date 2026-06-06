@@ -382,3 +382,8 @@ Interim complete-cell audit while the remaining full grid continues:
   full load.
 - Verified the direct environment path can import R `policytree` and run the
   reproduction CLI. All 21 protocol/report regression tests pass.
+- After a longer stable measurement, the 28+28 allocation produced 3.30 tree
+  and 6.89 TS chunks per minute. Rebalanced the same 56 workers to 32 tree and
+  24 TS because the remaining task ratio implied completion times of about
+  53.5 versus 41 hours. The balanced estimate is about 47-48 hours for both
+  parents, without increasing total process count or memory pressure.
