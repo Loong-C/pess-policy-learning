@@ -141,6 +141,19 @@ The comparison script uses a two one-sided tests equivalence check. An
 equivalence margin and significance level must be declared before interpreting
 the result.
 
+After all full-mode CSVs are present, the complete sensitivity analysis is:
+
+```bash
+python experiments/analyze_full_reproduction.py \
+  --root artifacts/reproduction/published/full \
+  --reference-root artifacts/reproduction/paper_reference \
+  --alpha 0.05
+```
+
+For Figures 5-9 it reports cell-level TOST classifications at value-scale
+margins `0.02`, `0.05`, and `0.10`. Figure 4 uses its smaller suboptimality
+scale, and Figure 10 uses paired differences across matched dataset cells.
+
 ## Repository layout
 
 - `algs/`: policy tree fitting, greedy policy learning, PPL, and cross-validation.

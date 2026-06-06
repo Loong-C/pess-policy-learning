@@ -203,7 +203,12 @@ Changes and validation:
   as in the released script. The active fixed-beta run already used that key
   and did not need to be restarted.
 - Added `pytest` to `environment.yml`, installed it in `pess-pl-legacy`, and
-  passed all 8 protocol regression tests.
+  passed all 10 protocol regression tests.
+- Added `experiments/analyze_full_reproduction.py`. It performs cell-level
+  TOST for Figures 4-9, paired TOST across matched real-data points for Figure
+  10, three-margin sensitivity analyses, and generates comparison figures.
+  The primary synthetic margin is 0.05 policy-value units at alpha 0.05;
+  margins 0.02 and 0.10 are retained to show sensitivity.
 - Stopped the superseded tree run after 55 incomplete-grid chunks, removed only
   its runtime chunk directory, and restarted it from zero. The concurrent TS
   run was not interrupted.

@@ -1,8 +1,13 @@
 import unittest
 
 import numpy as np
+import pandas as pd
 
 from algs.pess import compute_variance_terms
+from experiments.analyze_full_reproduction import (
+    _paired_tost,
+    add_equivalence_statistics,
+)
 from experiments.reproduce import (
     FULL_CONTEXTUAL_T_VALUES,
     TREE_LINEAR_BETAS,
@@ -74,6 +79,25 @@ class ProtocolTests(unittest.TestCase):
             _ts_rep_seed(7, "published", 2, 1000, 10, "0.5", 3),
             expected_rep,
         )
+
+    def test_equivalence_statistics_distinguish_match_and_difference(self):
+        comparison = pd.DataFrame(
+            {
+                "ours_mean": [1.0, 1.2],
+                "paper_mean": [1.0, 1.0],
+                "ours_se": [0.005, 0.005],
+                "paper_se_used": [0.005, 0.005],
+            }
+        )
+        result = add_equivalence_statistics(comparison, margin=0.05, alpha=0.05)
+        self.assertTrue(bool(result.loc[0, "equivalent"]))
+        self.assertTrue(bool(result.loc[1, "different"]))
+
+    def test_paired_tost_uses_equivalence_confidence_interval(self):
+        result = _paired_tost(pd.Series([0.005, -0.004, 0.002, -0.001]), 0.02, 0.05)
+        self.assertTrue(result["equivalent"])
+        self.assertLess(result["ci90_low"], result["mean_diff"])
+        self.assertGreater(result["ci90_high"], result["mean_diff"])
 
 
 if __name__ == "__main__":
