@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import numpy as np
 import pandas as pd
@@ -16,6 +18,7 @@ from experiments.reproduce import (
     TREE_PESS_BETAS,
     _contextual_noise_sigma,
     _real_grid,
+    _run_chunked,
     _stable_seed,
     _cached_eval_data,
     _ts_eval_seed,
@@ -190,6 +193,22 @@ class ProtocolTests(unittest.TestCase):
         second = _cached_eval_data(("unit-test", 1), factory)
         self.assertIs(first, second)
         self.assertEqual(len(calls), 1)
+
+    def test_chunk_runner_fails_when_a_task_does_not_finish(self):
+        def fail(_task):
+            raise ValueError("expected test failure")
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with self.assertRaisesRegex(RuntimeError, "1 task chunks are missing"):
+                _run_chunked(
+                    [{"task_id": "broken"}],
+                    fail,
+                    root / "chunks",
+                    root / "combined.csv",
+                    jobs=1,
+                )
+            self.assertTrue((root / "chunks" / "errors.jsonl").exists())
 
     def test_published_real_grid_matches_released_script(self):
         betas, settings, datasets, batches, _, _ = _real_grid(

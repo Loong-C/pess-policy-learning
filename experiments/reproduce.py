@@ -207,6 +207,19 @@ def _run_chunked(tasks, worker, chunk_dir: Path, combined_path: Path | None, job
                 except Exception as exc:
                     write_error(task, exc)
 
+    missing = [
+        task["task_id"]
+        for task in tasks
+        if not _chunk_path(chunk_dir, task).exists()
+    ]
+    if missing:
+        preview = ", ".join(missing[:5])
+        suffix = "" if len(missing) <= 5 else ", ..."
+        raise RuntimeError(
+            f"{len(missing)} task chunks are missing ({preview}{suffix}); "
+            f"see {error_path}"
+        )
+
     frames = []
     for path in sorted(chunk_dir.glob("*.csv")):
         if path.stat().st_size > 0:
