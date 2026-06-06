@@ -124,6 +124,15 @@ python experiments/extract_contextual_paper_references.py \
   --out-dir artifacts/reproduction/paper_reference
 ```
 
+Figure 10 is extracted by dataset name rather than only by plotted index,
+because the released script contains 32 datasets while the paper text says 33:
+
+```bash
+python experiments/extract_real_paper_reference.py \
+  --svg tmp/arxiv-2212.09900/figs/real.svg \
+  --out artifacts/reproduction/paper_reference/figure10_real.csv
+```
+
 Figure 5's caption names six penalty values, but its vector paths and the
 released experiment script contain three additional PPL values
 (`0.0001`, `0.001`, and `0.01`). The `published` protocol follows those

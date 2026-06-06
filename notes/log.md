@@ -188,6 +188,10 @@ reference extraction for Figures 5-9.
 Changes and validation:
 - Added `experiments/extract_contextual_paper_references.py` and committed
   vector-derived reference tables for Figures 5-9 (1,944 visible curve points).
+- Added `experiments/extract_real_paper_reference.py`; Figure 10 contains 211
+  visible points. The extractor maps the released 32-dataset figure index back
+  to dataset names so that the restored `skin-segmentation` entry does not
+  shift every later comparison.
 - Added SVG coordinate tolerance and explicit handling for the three Figure 5
   curves clipped out of the Setting 1 plotting region.
 - Corrected the Figure 5 published grid to nine PPL penalty values after
