@@ -174,3 +174,8 @@ Validation and current result:
   values. The first published full run was stopped after 14 tree and 24 TS
   chunks; all were T=1000 and remain valid. The corrected grid reduces the
   synthetic task count by 20%.
+- Figure 5 contains six PPL curves (`beta={0.1,0.2,0.5,1,5,10}`) but nine
+  linear-PEVI curves (also including `0.0001,0.001,0.01`). The shared beta list
+  in the first runner revision performed three PPL fits that are absent from
+  the published figure. The early tree queue was stopped at 91 chunks, those
+  runtime chunks were removed, and the corrected tree queue was restarted.

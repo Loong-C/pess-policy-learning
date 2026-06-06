@@ -40,6 +40,8 @@ from utils.experiment import run_experiment, run_experiment_opt
 ARTIFACT_ROOT = Path("artifacts/reproduction")
 OPENML_CACHE = Path("data/openml")
 FULL_CONTEXTUAL_T_VALUES = [500, 1000, 2000, 5000]
+TREE_PESS_BETAS = [0.1, 0.2, 0.5, 1, 5, 10]
+TREE_LINEAR_BETAS = [0.0001, 0.001, 0.01, 0.1, 0.2, 0.5, 1, 5, 10]
 openml.config.cache_directory = str(OPENML_CACHE.resolve())
 
 MAB_SETTINGS = {
@@ -438,7 +440,6 @@ def _run_contextual_task(task: dict) -> pd.DataFrame:
     decay = task["decay"]
     decay_label = task["decay_label"]
     rep = int(task["rep"])
-    beta_list = [0.0001, 0.001, 0.01, 0.1, 0.2, 0.5, 1, 5, 10]
     dgp_class = PublishedMultiQuad if protocol == "published" else MultiQuad
     eval_data = dgp_class(2, 10, sigma=0).sample_data(
         cfg.t_eval,
@@ -459,10 +460,11 @@ def _run_contextual_task(task: dict) -> pd.DataFrame:
     _, _, rw_greedy = eval_ptree(greedy, eval_data)
     rows.append({"experiment": "tree", "scenario": scenario, "T": T, "decay": decay_label, "rep": rep, "method": "greedy", "beta": 0.0, "value": rw_greedy})
     lin_model = fit_linear_pevi(xs, yobs, ws, arm_count=10)
-    for beta in beta_list:
+    for beta in TREE_PESS_BETAS:
         tree, _ = _ppl_fit(protocol, xs, yobs, ws, ps, beta=beta, depth=5)
         _, _, value = eval_ptree(tree, eval_data)
         rows.append({"experiment": "tree", "scenario": scenario, "T": T, "decay": decay_label, "rep": rep, "method": "pess", "beta": beta, "value": value})
+    for beta in TREE_LINEAR_BETAS:
         _, _, lin_value = eval_linear_pevi(lin_model, eval_data, beta=beta)
         rows.append({"experiment": "tree", "scenario": scenario, "T": T, "decay": decay_label, "rep": rep, "method": "lin", "beta": beta, "value": lin_value})
     return pd.DataFrame(rows)

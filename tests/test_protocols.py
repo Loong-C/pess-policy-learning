@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from algs.pess import compute_variance_terms
-from experiments.reproduce import FULL_CONTEXTUAL_T_VALUES
+from experiments.reproduce import FULL_CONTEXTUAL_T_VALUES, TREE_LINEAR_BETAS, TREE_PESS_BETAS
 from utils.compute import apply_floor
 from utils.dgp import MultiLinear, MultiQuad, PublishedMultiLinear, PublishedMultiQuad
 from utils.thompson import LinTS
@@ -12,6 +12,10 @@ from utils.thompson import LinTS
 class ProtocolTests(unittest.TestCase):
     def test_published_contextual_sample_size_grid(self):
         self.assertEqual(FULL_CONTEXTUAL_T_VALUES, [500, 1000, 2000, 5000])
+
+    def test_tree_beta_grids_match_figure_5(self):
+        self.assertEqual(TREE_PESS_BETAS, [0.1, 0.2, 0.5, 1, 5, 10])
+        self.assertEqual(TREE_LINEAR_BETAS, [0.0001, 0.001, 0.01, 0.1, 0.2, 0.5, 1, 5, 10])
 
     def test_paper_and_published_quad_formulas_are_distinct(self):
         xs = np.array([[2.0, 0.0], [0.0, 0.0]])
