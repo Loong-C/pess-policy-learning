@@ -86,6 +86,8 @@ REAL_DATASETS = [
     "segment",
 ]
 
+_WORKER_EVAL_CACHE = {}
+
 
 @dataclass
 class ModeConfig:
@@ -147,6 +149,15 @@ def _stable_seed(seed: int, *parts) -> int:
         h.update(b"|")
         h.update(str(part).encode("utf-8"))
     return int.from_bytes(h.digest(), "little") % (2**31 - 1)
+
+
+def _cached_eval_data(key, factory):
+    cached = _WORKER_EVAL_CACHE.get("entry")
+    if cached is None or cached[0] != key:
+        cached = (key, factory())
+        _WORKER_EVAL_CACHE.clear()
+        _WORKER_EVAL_CACHE["entry"] = cached
+    return cached[1]
 
 
 def _chunk_path(chunk_dir: Path, task: dict) -> Path:
@@ -448,6 +459,35 @@ def eval_linear_pevi(model, eval_data, beta: float) -> tuple[np.ndarray, np.ndar
     return pred, rewards, float(np.mean(rewards))
 
 
+def eval_linear_pevi_grid(model, eval_data, betas) -> dict[float, float]:
+    theta, inv_gram = model
+    xs = np.asarray(eval_data["xs"], dtype=float)
+    ys = np.asarray(eval_data["ys"], dtype=float)
+    arm_count = ys.shape[1]
+    scores = np.zeros((xs.shape[0], arm_count), dtype=float)
+    uncertainty = np.zeros_like(scores)
+    for arm in range(arm_count):
+        feat = _linear_pevi_design(
+            xs,
+            np.full(xs.shape[0], arm, dtype=int),
+            arm_count,
+        )
+        scores[:, arm] = feat @ theta
+        uncertainty[:, arm] = np.sqrt(
+            np.maximum(
+                np.einsum("ij,jk,ik->i", feat, inv_gram, feat),
+                0.0,
+            )
+        )
+    values = {}
+    for beta in betas:
+        pred = np.argmax(scores - float(beta) * uncertainty, axis=1)
+        values[float(beta)] = float(
+            np.mean(ys[np.arange(ys.shape[0]), pred])
+        )
+    return values
+
+
 def _run_contextual_task(task: dict) -> pd.DataFrame:
     cfg = ModeConfig(**task["cfg"])
     protocol = task["protocol"]
@@ -458,9 +498,15 @@ def _run_contextual_task(task: dict) -> pd.DataFrame:
     decay_label = task["decay_label"]
     rep = int(task["rep"])
     dgp_class = PublishedMultiQuad if protocol == "published" else MultiQuad
-    eval_data = dgp_class(2, 10, sigma=0).sample_data(
-        cfg.t_eval,
-        seed=_stable_seed(seed, protocol, "tree_eval", scenario, T, decay_label),
+    eval_seed = _stable_seed(
+        seed, protocol, "tree_eval", scenario, T, decay_label
+    )
+    eval_data = _cached_eval_data(
+        ("tree", protocol, cfg.t_eval, scenario, T, decay_label, eval_seed),
+        lambda: dgp_class(2, 10, sigma=0).sample_data(
+            cfg.t_eval,
+            seed=eval_seed,
+        ),
     )
     rows = []
 
@@ -477,6 +523,9 @@ def _run_contextual_task(task: dict) -> pd.DataFrame:
     _, _, rw_greedy = eval_ptree(greedy, eval_data)
     rows.append({"experiment": "tree", "scenario": scenario, "T": T, "decay": decay_label, "rep": rep, "method": "greedy", "beta": 0.0, "value": rw_greedy})
     lin_model = fit_linear_pevi(xs, yobs, ws, arm_count=10)
+    linear_values = eval_linear_pevi_grid(
+        lin_model, eval_data, TREE_LINEAR_BETAS
+    )
     initial = _published_initialization(
         protocol, greedy, xs, yobs, ws, ps
     )
@@ -494,7 +543,7 @@ def _run_contextual_task(task: dict) -> pd.DataFrame:
         _, _, value = eval_ptree(tree, eval_data)
         rows.append({"experiment": "tree", "scenario": scenario, "T": T, "decay": decay_label, "rep": rep, "method": "pess", "beta": beta, "value": value})
     for beta in TREE_LINEAR_BETAS:
-        _, _, lin_value = eval_linear_pevi(lin_model, eval_data, beta=beta)
+        lin_value = linear_values[float(beta)]
         rows.append({"experiment": "tree", "scenario": scenario, "T": T, "decay": decay_label, "rep": rep, "method": "lin", "beta": beta, "value": lin_value})
     return pd.DataFrame(rows)
 
@@ -595,9 +644,24 @@ def _run_ts_task(task: dict) -> pd.DataFrame:
     beta_default = [0.1, 0.2, 0.5, 1, 5, 10]
     beta_miss = [0.001, 0.01, 0.1, 0.2, 0.5, 1, 5, 10]
     dgp, dgp_eval = _dgp_for_ts(setting, protocol)
-    eval_data = dgp_eval.sample_data(
-        cfg.t_eval,
-        seed=_ts_eval_seed(seed, protocol, setting, T, batch_size, floor_label),
+    eval_seed = _ts_eval_seed(
+        seed, protocol, setting, T, batch_size, floor_label
+    )
+    eval_data = _cached_eval_data(
+        (
+            "ts",
+            protocol,
+            cfg.t_eval,
+            setting,
+            T,
+            batch_size,
+            floor_label,
+            eval_seed,
+        ),
+        lambda: dgp_eval.sample_data(
+            cfg.t_eval,
+            seed=eval_seed,
+        ),
     )
     beta_list = beta_miss if setting == 3 else beta_default
     rows = []

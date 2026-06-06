@@ -228,6 +228,10 @@ algorithm or any completed result.
 
 - Cached each repetition's greedy tree, training-set predictions, and AIPW
   score matrix across fixed penalty values.
+- Cached the deterministic 100,000-row evaluation set within each worker while
+  it processes the 200 repetitions of the same experiment cell.
+- Evaluated all nine linear-PEVI penalties from one shared score and
+  uncertainty matrix instead of rebuilding the 10-arm design nine times.
 - Cached the same initialization once per CV prefix split rather than fitting
   it again for every candidate penalty.
 - Reused the already-fitted full-data greedy tree for the final CV-selected
@@ -239,3 +243,6 @@ algorithm or any completed result.
 - Restarted tree and TS workers with `--resume`; 309 and 996 completed chunks
   were retained, and the continuation scheduler was rebound to the new parent
   processes.
+- The additional evaluation/linear cache was also checked against a completed
+  Figure 5 chunk (`max_abs_diff=2.22e-16`) and loaded through a second resumable
+  worker restart at 360 tree and 1,077 TS chunks.

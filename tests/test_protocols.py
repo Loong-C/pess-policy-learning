@@ -13,8 +13,11 @@ from experiments.reproduce import (
     TREE_LINEAR_BETAS,
     TREE_PESS_BETAS,
     _stable_seed,
+    _cached_eval_data,
     _ts_eval_seed,
     _ts_rep_seed,
+    eval_linear_pevi,
+    eval_linear_pevi_grid,
 )
 from utils.compute import apply_floor
 from utils.dgp import MultiLinear, MultiQuad, PublishedMultiLinear, PublishedMultiQuad
@@ -98,6 +101,32 @@ class ProtocolTests(unittest.TestCase):
         self.assertTrue(result["equivalent"])
         self.assertLess(result["ci90_low"], result["mean_diff"])
         self.assertGreater(result["ci90_high"], result["mean_diff"])
+
+    def test_linear_pevi_grid_matches_single_beta_evaluation(self):
+        model = (
+            np.array([1.0, 0.5, 0.5, -0.25]),
+            np.eye(4),
+        )
+        eval_data = {
+            "xs": np.array([[-1.0, 0.0], [0.5, 0.0], [2.0, 0.0]]),
+            "ys": np.array([[0.0, 1.0], [1.0, 0.0], [0.5, 0.75]]),
+        }
+        grid = eval_linear_pevi_grid(model, eval_data, [0.1, 1.0])
+        for beta in [0.1, 1.0]:
+            _, _, expected = eval_linear_pevi(model, eval_data, beta)
+            self.assertAlmostEqual(grid[beta], expected)
+
+    def test_worker_eval_cache_reuses_matching_key(self):
+        calls = []
+
+        def factory():
+            calls.append(1)
+            return object()
+
+        first = _cached_eval_data(("unit-test", 1), factory)
+        second = _cached_eval_data(("unit-test", 1), factory)
+        self.assertIs(first, second)
+        self.assertEqual(len(calls), 1)
 
 
 if __name__ == "__main__":
