@@ -220,3 +220,22 @@ Run status at this checkpoint:
 - Full Figures 6-8 TS run: active with 565/19,200 repetition chunks complete.
 - Full Figure 9 TS-CV and Figure 10 real-data runs remain queued behind those
   two synthetic runs.
+
+## 2026-06-06 12:36:19 +08:00
+
+Scope: reduced the full-run wall time without changing the published
+algorithm or any completed result.
+
+- Cached each repetition's greedy tree, training-set predictions, and AIPW
+  score matrix across fixed penalty values.
+- Cached the same initialization once per CV prefix split rather than fitting
+  it again for every candidate penalty.
+- Reused the already-fitted full-data greedy tree for the final CV-selected
+  PPL fit in synthetic and real-data experiments.
+- Recomputed one completed Figure 5 chunk and one completed Figure 6 chunk
+  with the optimized path. Their maximum value differences from the existing
+  CSVs were `2.22e-16` and `4.44e-16`, respectively, i.e. CSV floating-point
+  roundoff only.
+- Restarted tree and TS workers with `--resume`; 309 and 996 completed chunks
+  were retained, and the continuation scheduler was rebound to the new parent
+  processes.

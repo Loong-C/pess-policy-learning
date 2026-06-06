@@ -257,6 +257,7 @@ def _published_mm_update(
     depth: int,
     lower_bound: float,
     muxs=None,
+    gamma=None,
 ):
     """One update from the authors' released figure-generation implementation."""
     exs = np.asarray(exs, dtype=float)
@@ -264,7 +265,17 @@ def _published_mm_update(
     if t_count < 2:
         return PL_greedy(xxs, yobs, wws, exs, depth=depth, muxs=muxs)
 
-    gamma = PL_aipw_score(xxs, yobs, wws, exs, muxs=muxs, min_propensity=lower_bound)
+    if gamma is None:
+        gamma = PL_aipw_score(
+            xxs,
+            yobs,
+            wws,
+            exs,
+            muxs=muxs,
+            min_propensity=lower_bound,
+        )
+    else:
+        gamma = np.asarray(gamma, dtype=float)
     variance = _published_variance_terms(wws, policy_actions, exs, lower_bound=lower_bound)
     max_v = variance["maxV"]
     if max_v <= 0:
@@ -291,14 +302,32 @@ def PL_pessimism_published(
     muxs=None,
     maxround: int = 50,
     verbose: bool = False,
+    initial_tree=None,
+    initial_actions=None,
+    gamma=None,
 ):
     """Clean implementation of the public code used for the published figures.
 
     This intentionally remains separate from :func:`PL_pessimism`, which follows
     the displayed Algorithm 1 in Section 6.
     """
-    current_tree = PL_greedy(xxs, yobs, wws, exs, depth=depth, muxs=muxs)
-    fitted_actions = predict_ptree(current_tree, xxs)
+    current_tree = initial_tree
+    if current_tree is None:
+        current_tree = PL_greedy(xxs, yobs, wws, exs, depth=depth, muxs=muxs)
+    fitted_actions = initial_actions
+    if fitted_actions is None:
+        fitted_actions = predict_ptree(current_tree, xxs)
+    else:
+        fitted_actions = np.asarray(fitted_actions, dtype=int)
+    if gamma is None:
+        gamma = PL_aipw_score(
+            xxs,
+            yobs,
+            wws,
+            exs,
+            muxs=muxs,
+            min_propensity=lower_bound,
+        )
     t_count = len(fitted_actions)
 
     rounds = 0
@@ -315,6 +344,7 @@ def PL_pessimism_published(
             depth=depth,
             lower_bound=lower_bound,
             muxs=muxs,
+            gamma=gamma,
         )
         new_actions = predict_ptree(new_tree, xxs)
         current_tree = new_tree
@@ -355,14 +385,37 @@ def PPL_CV_published(
 
     folds = _fold_indices(len(xxs), Nfold)
     split_count = max(1, Nfold * 3 // 4 - 1)
+    splits = []
+    for fold_idx in range(split_count):
+        boundary = int(folds[fold_idx][-1])
+        train_idx = np.arange(0, boundary, dtype=int)
+        eval_idx = np.arange(boundary, len(xxs), dtype=int)
+        if len(train_idx) == 0 or len(eval_idx) == 0:
+            continue
+        train_tree = PL_greedy(
+            xxs[train_idx],
+            yobs[train_idx],
+            wws[train_idx],
+            exs[train_idx],
+            depth=depth,
+            muxs=muxs[train_idx],
+        )
+        train_actions = predict_ptree(train_tree, xxs[train_idx])
+        train_gamma = PL_aipw_score(
+            xxs[train_idx],
+            yobs[train_idx],
+            wws[train_idx],
+            exs[train_idx],
+            muxs=muxs[train_idx],
+            min_propensity=lower_bound,
+        )
+        splits.append(
+            (train_idx, eval_idx, train_tree, train_actions, train_gamma)
+        )
+
     scores: List[List[float]] = [[] for _ in beta_list]
     for beta_idx, beta in enumerate(beta_list):
-        for fold_idx in range(split_count):
-            boundary = int(folds[fold_idx][-1])
-            train_idx = np.arange(0, boundary, dtype=int)
-            eval_idx = np.arange(boundary, len(xxs), dtype=int)
-            if len(train_idx) == 0 or len(eval_idx) == 0:
-                continue
+        for train_idx, eval_idx, train_tree, train_actions, train_gamma in splits:
             tree, _ = PL_pessimism_published(
                 xxs[train_idx],
                 yobs[train_idx],
@@ -374,6 +427,9 @@ def PPL_CV_published(
                 muxs=muxs[train_idx],
                 maxround=maxround,
                 verbose=verbose,
+                initial_tree=train_tree,
+                initial_actions=train_actions,
+                gamma=train_gamma,
             )
             scores[beta_idx].append(
                 emp_eval_ptree(

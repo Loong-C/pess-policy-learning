@@ -25,7 +25,7 @@ import seaborn as sns
 from scipy import stats
 
 from algs.pess import PPL_CV, PPL_CV_published, PL_pessimism, PL_pessimism_published
-from algs.ptree import PL_greedy, eval_ptree
+from algs.ptree import PL_aipw_score, PL_greedy, eval_ptree, predict_ptree
 from utils.dgp import (
     MABandit,
     MultiLinear,
@@ -121,6 +121,23 @@ def _ppl_cv(protocol: str, *args, **kwargs):
     if protocol == "published":
         return PPL_CV_published(*args, **kwargs)
     return PPL_CV(*args, **kwargs)
+
+
+def _published_initialization(protocol, tree, xxs, yobs, wws, exs, muxs=None):
+    if protocol != "published":
+        return {}
+    return {
+        "initial_tree": tree,
+        "initial_actions": predict_ptree(tree, xxs),
+        "gamma": PL_aipw_score(
+            xxs,
+            yobs,
+            wws,
+            exs,
+            muxs=muxs,
+            min_propensity=0.0001,
+        ),
+    }
 
 
 def _stable_seed(seed: int, *parts) -> int:
@@ -460,8 +477,20 @@ def _run_contextual_task(task: dict) -> pd.DataFrame:
     _, _, rw_greedy = eval_ptree(greedy, eval_data)
     rows.append({"experiment": "tree", "scenario": scenario, "T": T, "decay": decay_label, "rep": rep, "method": "greedy", "beta": 0.0, "value": rw_greedy})
     lin_model = fit_linear_pevi(xs, yobs, ws, arm_count=10)
+    initial = _published_initialization(
+        protocol, greedy, xs, yobs, ws, ps
+    )
     for beta in TREE_PESS_BETAS:
-        tree, _ = _ppl_fit(protocol, xs, yobs, ws, ps, beta=beta, depth=5)
+        tree, _ = _ppl_fit(
+            protocol,
+            xs,
+            yobs,
+            ws,
+            ps,
+            beta=beta,
+            depth=5,
+            **initial,
+        )
         _, _, value = eval_ptree(tree, eval_data)
         rows.append({"experiment": "tree", "scenario": scenario, "T": T, "decay": decay_label, "rep": rep, "method": "pess", "beta": beta, "value": value})
     for beta in TREE_LINEAR_BETAS:
@@ -614,16 +643,37 @@ def _run_ts_task(task: dict) -> pd.DataFrame:
     xs, yobs, ws, ps = logged["xs"], logged["yobs"], logged["ws"], logged["ps"]
     greedy = PL_greedy(xs, yobs, ws, ps, depth=5)
     _, _, rw_greedy = eval_ptree(greedy, eval_data)
+    initial = _published_initialization(
+        protocol, greedy, xs, yobs, ws, ps
+    )
     experiment = "ts_cv" if cv_only else "ts"
     rows.append({"experiment": experiment, "setting": setting, "T": T, "batch_size": batch_size, "floor": floor_label, "rep": rep, "method": "greedy", "beta": 0.0, "value": rw_greedy})
     if cv_only:
         beta_cv, _, _, _ = _ppl_cv(protocol, xs, yobs, ws, ps, beta_list=beta_default, Nfold=5, depth=5)
-        tree, _ = _ppl_fit(protocol, xs, yobs, ws, ps, beta=beta_cv, depth=5)
+        tree, _ = _ppl_fit(
+            protocol,
+            xs,
+            yobs,
+            ws,
+            ps,
+            beta=beta_cv,
+            depth=5,
+            **initial,
+        )
         _, _, value = eval_ptree(tree, eval_data)
         rows.append({"experiment": "ts_cv", "setting": setting, "T": T, "batch_size": batch_size, "floor": floor_label, "rep": rep, "method": "CV_pess", "beta": beta_cv, "value": value})
     else:
         for beta in beta_list:
-            tree, _ = _ppl_fit(protocol, xs, yobs, ws, ps, beta=beta, depth=5)
+            tree, _ = _ppl_fit(
+                protocol,
+                xs,
+                yobs,
+                ws,
+                ps,
+                beta=beta,
+                depth=5,
+                **initial,
+            )
             _, _, value = eval_ptree(tree, eval_data)
             rows.append({"experiment": "ts", "setting": setting, "T": T, "batch_size": batch_size, "floor": floor_label, "rep": rep, "method": "pess", "beta": beta, "value": value})
     return pd.DataFrame(rows)
@@ -769,8 +819,20 @@ def _run_real_dataset_task(task: dict) -> pd.DataFrame:
                 xs, yobs, ws, ps = logged["xs"], logged["yobs"], logged["ws"], logged["ps"]
                 greedy = PL_greedy(xs, yobs, ws, ps, depth=5)
                 _, _, rw_greedy = eval_ptree(greedy, eval_data)
+                initial = _published_initialization(
+                    protocol, greedy, xs, yobs, ws, ps
+                )
                 beta_cv, _, _, _ = _ppl_cv(protocol, xs, yobs, ws, ps, beta_list=beta_list, Nfold=5, depth=5)
-                tree, _ = _ppl_fit(protocol, xs, yobs, ws, ps, beta=beta_cv, depth=5)
+                tree, _ = _ppl_fit(
+                    protocol,
+                    xs,
+                    yobs,
+                    ws,
+                    ps,
+                    beta=beta_cv,
+                    depth=5,
+                    **initial,
+                )
                 _, _, rw_pess = eval_ptree(tree, eval_data)
                 rows.append(
                     {
