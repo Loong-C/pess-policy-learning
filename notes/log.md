@@ -260,3 +260,11 @@ algorithm or any completed result.
   Figure 6 chunks differed from existing CSV values by at most `4.44e-16`, so
   all TS chunks remained valid. The scheduler was stopped first, then only the
   TS parent was restarted at 1,254 completed chunks.
+- Recovered the missing real-data generator behavior from the upstream
+  contextual-bandit evaluation source that the released `real.py` calls:
+  shuffle and cap at 20,000 rows, then use `signal_strength=0.5`.
+- Split the real-data profiles explicitly. `published` now uses the released
+  32-dataset list (without `skin-segmentation`), six CV candidates
+  `{0.1,0.5,1,2,5,10}`, and no artificial floor for pure exploration.
+  `paper-spec` retains the appendix's 33 datasets, reward signal 1, and the
+  eight candidates stated in Section 7.3. Fifteen regression tests pass.

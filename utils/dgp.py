@@ -149,8 +149,29 @@ def _preprocess_openml_features(X_train, X_eval):
     return np.asarray(x_train, dtype=float), np.asarray(x_eval, dtype=float)
 
 
-def generate_bandit_data(X, y, noise_std=0.1, test_size=0.5, seed=0, max_arms: int | None = None):
+def _take_rows(values, indices):
+    if hasattr(values, "iloc"):
+        return values.iloc[indices]
+    return np.asarray(values)[indices]
+
+
+def generate_bandit_data(
+    X,
+    y,
+    noise_std=0.1,
+    signal_strength=1.0,
+    test_size=0.5,
+    seed=0,
+    max_arms: int | None = None,
+    max_rows: int | None = None,
+):
     """Classification-to-bandit transform used in Section 7.3."""
+    rng = _rng(seed)
+    if max_rows is not None and len(y) > int(max_rows):
+        selected = rng.permutation(len(y))[: int(max_rows)]
+        X = _take_rows(X, selected)
+        y = _take_rows(y, selected)
+
     classes = np.unique(y)
     if max_arms is not None and len(classes) > int(max_arms):
         raise ValueError(f"Expected a classification target with at most {max_arms} classes, got {len(classes)}.")
@@ -169,9 +190,8 @@ def generate_bandit_data(X, y, noise_std=0.1, test_size=0.5, seed=0, max_arms: i
     eval_labels = np.array([label_to_arm[v] for v in y_eval], dtype=int)
 
     K = len(classes)
-    muxs = np.eye(K, dtype=float)[train_labels]
-    muxs_eval = np.eye(K, dtype=float)[eval_labels]
-    rng = _rng(seed)
+    muxs = np.eye(K, dtype=float)[train_labels] * float(signal_strength)
+    muxs_eval = np.eye(K, dtype=float)[eval_labels] * float(signal_strength)
     ys = muxs + rng.normal(0, noise_std, size=muxs.shape)
 
     data = {

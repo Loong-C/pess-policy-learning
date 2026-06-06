@@ -50,7 +50,7 @@ MAB_SETTINGS = {
     3: ("Uniform", np.array([0, 0.05, 0.03, 0.01, -0.01], dtype=float), np.array([0.2] * 5)),
 }
 
-REAL_DATASETS = [
+PAPER_SPEC_REAL_DATASETS = [
     "waveform-5000",
     "Long",
     "cmc",
@@ -84,6 +84,12 @@ REAL_DATASETS = [
     "eeg-eye-state",
     "car",
     "segment",
+]
+
+PUBLISHED_REAL_DATASETS = [
+    dataset
+    for dataset in PAPER_SPEC_REAL_DATASETS
+    if dataset != "skin-segmentation"
 ]
 
 _WORKER_EVAL_CACHE = {}
@@ -812,12 +818,14 @@ def _load_openml_dataset(name: str):
 
 def _real_grid(mode: str, protocol: str):
     if mode == "full":
-        beta_list = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15]
         if protocol == "published":
-            settings = [("pure", 0.0, 0.001), ("0.8", 0.8, 0.5), ("0.5", 0.5, 0.5), ("0.2", 0.2, 0.5)]
-        else:
+            beta_list = [0.1, 0.5, 1, 2, 5, 10]
             settings = [("pure", None, None), ("0.8", 0.8, 0.5), ("0.5", 0.5, 0.5), ("0.2", 0.2, 0.5)]
-        datasets = REAL_DATASETS
+            datasets = PUBLISHED_REAL_DATASETS
+        else:
+            beta_list = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15]
+            settings = [("pure", None, None), ("0.8", 0.8, 0.5), ("0.5", 0.5, 0.5), ("0.2", 0.2, 0.5)]
+            datasets = PAPER_SPEC_REAL_DATASETS
         batch_values = [10, 100]
         max_train = None
         max_eval = None
@@ -844,12 +852,15 @@ def _run_real_dataset_task(task: dict) -> pd.DataFrame:
     X, y, _, _ = _load_openml_dataset(name)
     for rep in range(cfg.real_nrep):
         try:
+            published_profile = protocol == "published"
             bandit, _ = generate_bandit_data(
                 X,
                 y,
                 noise_std=0.1,
+                signal_strength=0.5 if published_profile else 1.0,
                 seed=seed + 1000 * rep + data_idx,
                 max_arms=50,
+                max_rows=20000 if published_profile else None,
             )
         except ValueError as exc:
             rows.append({"experiment": "real_skipped", "dataset_index": data_idx, "dataset": name, "reason": str(exc)})

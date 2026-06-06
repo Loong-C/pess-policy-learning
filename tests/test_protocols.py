@@ -10,8 +10,11 @@ from experiments.analyze_full_reproduction import (
 )
 from experiments.reproduce import (
     FULL_CONTEXTUAL_T_VALUES,
+    PAPER_SPEC_REAL_DATASETS,
+    PUBLISHED_REAL_DATASETS,
     TREE_LINEAR_BETAS,
     TREE_PESS_BETAS,
+    _real_grid,
     _stable_seed,
     _cached_eval_data,
     _ts_eval_seed,
@@ -20,7 +23,13 @@ from experiments.reproduce import (
     eval_linear_pevi_grid,
 )
 from utils.compute import apply_floor
-from utils.dgp import MultiLinear, MultiQuad, PublishedMultiLinear, PublishedMultiQuad
+from utils.dgp import (
+    MultiLinear,
+    MultiQuad,
+    PublishedMultiLinear,
+    PublishedMultiQuad,
+    generate_bandit_data,
+)
 from utils.thompson import LinTS
 
 
@@ -144,6 +153,32 @@ class ProtocolTests(unittest.TestCase):
         second = _cached_eval_data(("unit-test", 1), factory)
         self.assertIs(first, second)
         self.assertEqual(len(calls), 1)
+
+    def test_published_real_grid_matches_released_script(self):
+        betas, settings, datasets, batches, _, _ = _real_grid(
+            "full", "published"
+        )
+        self.assertEqual(betas, [0.1, 0.5, 1, 2, 5, 10])
+        self.assertEqual(settings[0], ("pure", None, None))
+        self.assertEqual(batches, [10, 100])
+        self.assertEqual(datasets, PUBLISHED_REAL_DATASETS)
+        self.assertEqual(len(datasets), 32)
+        self.assertNotIn("skin-segmentation", datasets)
+        self.assertEqual(len(PAPER_SPEC_REAL_DATASETS), 33)
+
+    def test_published_real_transform_caps_rows_and_scales_signal(self):
+        xs = np.arange(200, dtype=float).reshape(100, 2)
+        labels = np.tile([0, 1], 50)
+        data, _ = generate_bandit_data(
+            xs,
+            labels,
+            signal_strength=0.5,
+            max_rows=20,
+            seed=4,
+        )
+        self.assertEqual(data["T"] + data["T_test"], 20)
+        self.assertEqual(float(data["muxs"].max()), 0.5)
+        self.assertEqual(float(data["muxs_test"].max()), 0.5)
 
 
 if __name__ == "__main__":

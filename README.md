@@ -21,7 +21,7 @@ The `paper-spec` path includes the following literal-specification repairs:
 - Synthetic DGPs now match the reward formulas in Section 7.
 - The MAB experiment uses `mu / sqrt(T)` and reports rescaled suboptimality.
 - The Section 7.1.2 linear PEVI baseline is included.
-- The real-data OpenML list now contains 33 datasets, including `skin-segmentation`.
+- The paper-spec real-data list contains all 33 appendix datasets, including `skin-segmentation`.
 
 ## Environment
 
@@ -48,6 +48,14 @@ It also includes `pytest`; the protocol regression suite runs with
 ## Data
 
 OpenML datasets for Section 7.3 are cached under `data/openml/`, which is intentionally git-ignored. The committed manifest `notes/openml_cache_manifest.csv` records the 33 dataset names, OpenML IDs, targets, shapes, and class counts.
+
+The published Figure 10 code actually lists 32 datasets and omits
+`skin-segmentation`; the paper appendix lists 33. Accordingly, `published`
+uses the 32-item figure order while `paper-spec` uses all 33. The released
+real-data generator is also restored in `published`: at most 20,000 shuffled
+rows, reward signal `0.5`, no floor in pure exploration, and six CV penalty
+candidates. The literal paper profile retains reward signal `1.0` and the
+eight candidates stated in Section 7.3.
 
 If an OpenML default target no longer behaves like a classification target, the real-data runner skips it and writes the reason to `real_skipped.csv`. In the current cache, `houses` has thousands of unique target values and is guarded this way.
 
