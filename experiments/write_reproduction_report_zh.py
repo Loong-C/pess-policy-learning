@@ -48,43 +48,51 @@ def _primary_rows(summary: pd.DataFrame) -> pd.DataFrame:
 
 def _figure_verdict(row: pd.Series) -> str:
     figure = int(row["figure"])
+    clustered = bool(row.get("clustered_mean_equivalent", False))
     if figure == 10:
-        if bool(row.get("paired_mean_equivalent", False)):
+        if clustered:
             return "数据集聚类后的平均差异等价"
         return "未证明数据集聚类后的平均差异等价"
     if bool(row["all_cells_equivalent"]):
-        return "全部匹配单元等价"
+        return "全部匹配单元等价，聚类均值等价"
     equivalent = int(row["equivalent_cells"])
     different = int(row["different_cells"])
     inconclusive = int(row["inconclusive_cells"])
     if different > 0:
+        prefix = "聚类均值等价；" if clustered else "聚类均值未证明等价；"
         return (
-            f"未成功：{different} 个单元明确不同，"
+            prefix + f"未成功：{different} 个单元明确不同，"
             f"{inconclusive} 个证据不足"
         )
-    return f"未完全证明：{equivalent} 个等价，{inconclusive} 个证据不足"
+    prefix = "聚类均值等价；" if clustered else "聚类均值未证明等价；"
+    return (
+        prefix
+        + f"未完全证明：{equivalent} 个等价，{inconclusive} 个证据不足"
+    )
 
 
 def _overall_verdict(primary: pd.DataFrame) -> str:
     synthetic = primary[primary["figure"].between(4, 9)]
     all_synthetic = bool(synthetic["all_cells_equivalent"].fillna(False).all())
-    real = primary[primary["figure"] == 10].iloc[0]
-    real_equivalent = bool(real.get("paired_mean_equivalent", False))
-    if all_synthetic and real_equivalent:
+    all_clustered = bool(
+        primary["clustered_mean_equivalent"].fillna(False).all()
+    )
+    if all_synthetic and all_clustered:
         return (
             "在预先声明的等价界和显著性水平下，所有主要图均通过等价性判定，"
             "可认为本次复现成功。"
+        )
+    if all_clustered:
+        return (
+            "所有主要图的聚类平均差异均通过等价性检验，但部分逐单元结果"
+            "未等价，因此只能认定为“总体平均层面复现”，不能认定为"
+            "“完整逐点复现”。"
         )
     failed = [
         str(int(row["figure"]))
         for _, row in primary.iterrows()
         if (
-            int(row["figure"]) < 10
-            and not bool(row["all_cells_equivalent"])
-        )
-        or (
-            int(row["figure"]) == 10
-            and not bool(row.get("paired_mean_equivalent", False))
+            not bool(row.get("clustered_mean_equivalent", False))
         )
     ]
     return (
@@ -95,18 +103,15 @@ def _overall_verdict(primary: pd.DataFrame) -> str:
 
 def _results_table(primary: pd.DataFrame) -> str:
     lines = [
-        "| 图 | 等价界 | 匹配/论文单元 | 等价 | 明确不同 | 证据不足 | MAE | 判定 |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| 图 | 等价界 | 匹配/论文单元 | 聚类均值等价 | 等价 | 明确不同 | 证据不足 | MAE | 判定 |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for _, row in primary.iterrows():
         figure = int(row["figure"])
         if figure == 10:
-            equivalent = (
-                "是" if bool(row.get("paired_mean_equivalent", False)) else "否"
-            )
-            cluster_count = _as_int(row.get("paired_cluster_count", np.nan))
+            cluster_count = _as_int(row.get("clustered_count", np.nan))
             status = (
-                f"聚类均值等价={equivalent}，独立数据集数={cluster_count}"
+                f"{_figure_verdict(row)}，独立数据集数={cluster_count}"
             )
             eq = diff = inconclusive = "-"
         else:
@@ -123,6 +128,11 @@ def _results_table(primary: pd.DataFrame) -> str:
                     (
                         f"{_as_int(row['matched_cells'])}/"
                         f"{_as_int(row['reference_cells'])}"
+                    ),
+                    (
+                        "是"
+                        if bool(row.get("clustered_mean_equivalent", False))
+                        else "否"
                     ),
                     eq,
                     diff,
@@ -203,11 +213,12 @@ def write_report(
 
 {_results_table(primary)}
 
-Figure 4-9 的判定单位是论文图中的方法/参数/样本量/实验设置单元。
+Figure 4-9 的逐点判定单位是论文图中的方法/参数/样本量/实验设置单元。
 “等价”要求差异的 90% 置信区间完全位于等价界内；“明确不同”要求
 差异的 95% 置信区间完全位于等价界外，其余归为“证据不足”。
-Figure 10 的多个面板共享同一数据集，故总体 TOST 先在数据集内平均，
-再以数据集作为独立聚类单位，避免把相关面板点误当成独立样本。
+总体 TOST 先在共享同一模拟数据的配置内对方法差异取平均，再以实验配置
+作为独立聚类单位。Figure 10 则先在数据集内平均，再以数据集为独立聚类，
+避免把相关方法或面板点误当成独立样本。
 
 ## 敏感性分析
 

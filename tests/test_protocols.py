@@ -235,6 +235,7 @@ class ProtocolTests(unittest.TestCase):
                     "margin": margin,
                     "all_cells_equivalent": True,
                     "paired_mean_equivalent": True,
+                    "clustered_mean_equivalent": True,
                 }
                 for figure, margin in {
                     4: 0.0025,
@@ -251,6 +252,12 @@ class ProtocolTests(unittest.TestCase):
         verdict = _overall_verdict(primary)
         self.assertEqual(len(primary), 7)
         self.assertTrue(verdict.endswith("\u3002"))
+        primary.loc[primary["figure"] == 6, "all_cells_equivalent"] = False
+        aggregate_only = _overall_verdict(primary)
+        self.assertIn(
+            "\u603b\u4f53\u5e73\u5747\u5c42\u9762\u590d\u73b0",
+            aggregate_only,
+        )
 
     def test_published_real_grid_matches_released_script(self):
         betas, settings, datasets, batches, _, _ = _real_grid(

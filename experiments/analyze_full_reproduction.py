@@ -157,6 +157,30 @@ def _figure_summary(
     }
 
 
+def _add_clustered_tost(
+    summary: dict,
+    comparison: pd.DataFrame,
+    cluster_keys: list[str],
+    margin: float,
+    alpha: float,
+) -> dict:
+    cluster_differences = (
+        comparison.groupby(cluster_keys, dropna=False)["diff"].mean()
+    )
+    clustered = _paired_tost(cluster_differences, margin, alpha)
+    summary.update(
+        {
+            "clustered_count": clustered["count"],
+            "clustered_mean_diff": clustered["mean_diff"],
+            "clustered_ci90_low": clustered["ci90_low"],
+            "clustered_ci90_high": clustered["ci90_high"],
+            "clustered_tost_p": clustered["tost_p"],
+            "clustered_mean_equivalent": clustered["equivalent"],
+        }
+    )
+    return summary
+
+
 def _load_synthetic_inputs(root: Path, reference_root: Path):
     data_root = root / "data"
     tree = _add_method_key(
@@ -208,7 +232,13 @@ def analyze_mab(
         )
         _write_comparison(output_root, 4, margin, comparison)
         summaries.append(
-            _figure_summary(4, comparison, len(reference), ours_cells)
+            _add_clustered_tost(
+                _figure_summary(4, comparison, len(reference), ours_cells),
+                comparison,
+                ["setting_name", "T"],
+                margin,
+                alpha,
+            )
         )
     return summaries
 
@@ -224,18 +254,22 @@ def analyze_synthetic(
         5: (
             tree,
             ["scenario", "decay", "T", "method_key"],
+            ["scenario", "decay", "T"],
         ),
         6: (
             ts[ts["setting"] == 1],
             ["setting", "batch_size", "floor", "T", "method_key"],
+            ["setting", "batch_size", "floor", "T"],
         ),
         7: (
             ts[ts["setting"] == 2],
             ["setting", "batch_size", "floor", "T", "method_key"],
+            ["setting", "batch_size", "floor", "T"],
         ),
         8: (
             ts[ts["setting"] == 3],
             ["setting", "batch_size", "floor", "T", "method_key"],
+            ["setting", "batch_size", "floor", "T"],
         ),
     }
 
@@ -252,11 +286,12 @@ def analyze_synthetic(
     figure_inputs[9] = (
         pd.concat([fixed_figure9, cv_figure9], ignore_index=True),
         ["setting", "batch_size", "floor", "T", "method_key"],
+        ["setting", "batch_size", "floor", "T"],
     )
 
     summaries = []
     primary_comparisons = {}
-    for figure, (raw, keys) in figure_inputs.items():
+    for figure, (raw, keys, cluster_keys) in figure_inputs.items():
         reference = references[figure]
         ours_cells = len(raw.groupby(keys, dropna=False))
         for margin in SYNTHETIC_MARGINS:
@@ -270,11 +305,17 @@ def analyze_synthetic(
             )
             _write_comparison(output_root, figure, margin, comparison)
             summaries.append(
-                _figure_summary(
-                    figure,
+                _add_clustered_tost(
+                    _figure_summary(
+                        figure,
+                        comparison,
+                        len(reference),
+                        ours_cells,
+                    ),
                     comparison,
-                    len(reference),
-                    ours_cells,
+                    cluster_keys,
+                    margin,
+                    alpha,
                 )
             )
             if np.isclose(margin, 0.05):
@@ -371,6 +412,12 @@ def analyze_real(
                 "paired_cluster_count": paired["count"],
                 "paired_ci90_low": paired["ci90_low"],
                 "paired_ci90_high": paired["ci90_high"],
+                "clustered_count": paired["count"],
+                "clustered_mean_diff": paired["mean_diff"],
+                "clustered_ci90_low": paired["ci90_low"],
+                "clustered_ci90_high": paired["ci90_high"],
+                "clustered_tost_p": paired["tost_p"],
+                "clustered_mean_equivalent": paired["equivalent"],
                 "descriptive_cells_within_margin": within,
                 "descriptive_within_margin_rate": within / len(comparison),
                 "sign_agreement_rate": float(comparison["sign_agreement"].mean()),

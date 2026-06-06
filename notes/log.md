@@ -392,3 +392,22 @@ Interim complete-cell audit while the remaining full grid continues:
   equivalence analysis, regenerates the UTF-8 Chinese report, and executes the
   protocol regression suite. Final Git staging remains a separate reviewed
   step so unrelated worktree changes cannot be committed automatically.
+
+## 2026-06-06 19:31:33 +08:00
+
+- Added a second, correlation-aware equivalence layer. Figure 4-9 method
+  differences are averaged within each independent experimental
+  configuration before a paired TOST; Figure 10 is clustered by dataset.
+  This is reported alongside, not instead of, strict cell-level equivalence.
+- The distinction answers two different questions: whether the experiment is
+  unbiased on average, and whether it reproduces every published curve point.
+  The final Chinese report now labels "aggregate mean reproduction" separately
+  from "complete pointwise reproduction".
+- Interim validation on the complete `T={500,1000}` slices gives Figure 5
+  clustered mean difference `0.00076` with 90% CI
+  `[-0.00240, 0.00392]`, and Figure 6 difference `-0.03744` with 90% CI
+  `[-0.04644, -0.02844]`; both are inside the primary `+/-0.05` margin.
+  Figure 6 nevertheless has 15 clearly different cells, all inherited from
+  the `T=500` slice, so it is aggregate-equivalent but not pointwise complete.
+- Re-ran the complete suite after the clustered-inference change: 21 tests
+  pass.
