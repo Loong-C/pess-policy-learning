@@ -339,3 +339,5 @@ Figure 6 sentinel still differed from the vector reference.
 - Increased the queued Figure 10 real-data stage from two to four workers.
   This remains conservative for the 20,000-row cap and will run only after
   both synthetic phases and Figure 9 have released their memory.
+- Increased the queued Figure 9 TS-CV stage from 20 to 40 workers because it
+  runs alone after both 20-worker synthetic phases have exited.

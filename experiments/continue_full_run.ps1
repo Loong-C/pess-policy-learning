@@ -67,6 +67,6 @@ Write-Status "waiting for tree PID $TreeProcessId and TS PID $TsProcessId"
 Wait-Process -Id $TreeProcessId, $TsProcessId -ErrorAction SilentlyContinue
 Write-Status "tree and TS parent processes finished"
 
-Invoke-ReproductionPhase -Experiment "ts-cv" -Jobs 20
+Invoke-ReproductionPhase -Experiment "ts-cv" -Jobs 40
 Invoke-ReproductionPhase -Experiment "real" -Jobs $RealJobs
 Write-Status "all scheduled full reproduction phases finished"

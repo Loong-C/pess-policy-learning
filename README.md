@@ -99,7 +99,7 @@ Completed chunks are written below
 python experiments/reproduce.py --mode full --protocol published --experiment mab --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 20 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 20 --resume --seed 20260605
-python experiments/reproduce.py --mode full --protocol published --experiment ts-cv --jobs 20 --resume --seed 20260605
+python experiments/reproduce.py --mode full --protocol published --experiment ts-cv --jobs 40 --resume --seed 20260605
 python experiments/reproduce.py --mode full --protocol published --experiment real --jobs 4 --resume --seed 20260605
 ```
 
