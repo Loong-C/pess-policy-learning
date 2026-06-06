@@ -1,0 +1,17 @@
+{
+  "mode": "quick",
+  "protocol": "published",
+  "experiment": "real",
+  "seed": 20260605,
+  "jobs": 1,
+  "resume": false,
+  "config": {
+    "mode": "quick",
+    "mab_nrep": 30,
+    "tree_nrep": 1,
+    "ts_nrep": 1,
+    "real_nrep": 1,
+    "t_eval": 1000,
+    "num_mc": 100
+  }
+}

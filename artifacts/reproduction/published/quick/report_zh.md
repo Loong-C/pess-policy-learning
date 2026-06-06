@@ -82,6 +82,30 @@ rows: 4590, columns: experiment, setting, setting_name, T, rep, method, action, 
 
 
 
+### real_results.csv
+
+rows: 2, columns: experiment, dataset_index, dataset, batch_size, floor, rep, greedy_value, pess_value, improvement, beta_cv, T_train, T_eval, K, p
+
+
+| floor   |   batch_size |    mean |   std |   count |   se |   ci95_low |   ci95_high |   p_value_gt0 |
+|:--------|-------------:|--------:|------:|--------:|-----:|-----------:|------------:|--------------:|
+| 0.5     |           10 |  0.0000 |   nan |       1 |  nan |        nan |         nan |           nan |
+| pure    |           10 | -0.0300 |   nan |       1 |  nan |        nan |         nan |           nan |
+
+
+
+### ts_cv_results.csv
+
+rows: 16, columns: experiment, setting, T, batch_size, floor, rep, method, beta, value
+
+
+| experiment   |   setting | method   |   mean |    std |   count |     se |   ci95_low |   ci95_high |
+|:-------------|----------:|:---------|-------:|-------:|--------:|-------:|-----------:|------------:|
+| ts_cv        |         2 | CV_pess  | 1.6567 | 0.1489 |       8 | 0.0526 |     1.5535 |      1.7599 |
+| ts_cv        |         2 | greedy   | 1.6206 | 0.1073 |       8 | 0.0379 |     1.5462 |      1.6949 |
+
+
+
 ### ts_synthetic_results.csv
 
 rows: 368, columns: experiment, setting, T, batch_size, floor, rep, method, beta, value
