@@ -5,7 +5,8 @@ param(
     [int]$TsProcessId,
     [string]$PythonExe = "D:\Users\hp\anaconda3\envs\pess-pl-legacy\python.exe",
     [string]$Seed = "20260605",
-    [int]$RealJobs = 4
+    [int]$RealJobs = 4,
+    [int[]]$ExcludedContextualT = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -61,6 +62,10 @@ function Invoke-ReproductionPhase(
         "--experiment", $Experiment, "--jobs", "$Jobs",
         "--resume", "--seed", $Seed
     )
+    if ($Experiment -in @("tree", "ts", "ts-cv") -and $ExcludedContextualT.Count -gt 0) {
+        $arguments += "--exclude-contextual-t"
+        $arguments += $ExcludedContextualT | ForEach-Object { "$_" }
+    }
     Write-Status "starting $Experiment with $Jobs workers"
     $process = Start-Process `
         -FilePath $PythonExe `

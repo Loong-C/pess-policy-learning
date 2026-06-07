@@ -221,7 +221,8 @@ def _run_chunked(tasks, worker, chunk_dir: Path, combined_path: Path | None, job
         )
 
     frames = []
-    for path in sorted(chunk_dir.glob("*.csv")):
+    expected_paths = sorted(_chunk_path(chunk_dir, task) for task in tasks)
+    for path in expected_paths:
         if path.stat().st_size > 0:
             frames.append(pd.read_csv(path))
     df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
@@ -613,10 +614,14 @@ def run_contextual_nonadaptive(
     seed: int = 0,
     jobs: int = 1,
     resume: bool = False,
+    exclude_t_values: tuple[int, ...] = (),
 ) -> pd.DataFrame:
     cfg = mode_config(mode)
     outdir = outdir_for(mode, protocol)
     t_list = FULL_CONTEXTUAL_T_VALUES if mode == "full" else [300, 600]
+    t_list = [T for T in t_list if T not in exclude_t_values]
+    if not t_list:
+        raise ValueError("At least one contextual sample size must remain.")
     decays = [0.2, 0.4, 0.6, 0.8, None] if mode == "full" else [0.5, None]
     tasks = []
     for scenario in [1, 2, 3]:
@@ -818,10 +823,14 @@ def run_ts_synthetic(
     cv_only: bool = False,
     jobs: int = 1,
     resume: bool = False,
+    exclude_t_values: tuple[int, ...] = (),
 ) -> pd.DataFrame:
     cfg = mode_config(mode)
     outdir = outdir_for(mode, protocol)
     t_list = FULL_CONTEXTUAL_T_VALUES if mode == "full" else [300, 600]
+    t_list = [T for T in t_list if T not in exclude_t_values]
+    if not t_list:
+        raise ValueError("At least one contextual sample size must remain.")
     if protocol == "published":
         floor_settings = [("pure", 0.0, 0.001), ("0.2", 0.2, 0.1), ("0.5", 0.5, 0.1), ("0.8", 0.8, 0.1)]
     else:
@@ -1131,7 +1140,16 @@ def main():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--jobs", type=int, default=1, help="Number of worker processes for tree/TS/real chunked experiments.")
     parser.add_argument("--resume", action="store_true", help="Reuse completed chunk CSVs and only run missing chunks.")
+    parser.add_argument(
+        "--exclude-contextual-t",
+        type=int,
+        nargs="*",
+        default=[],
+        metavar="T",
+        help="Exclude contextual/TS sample sizes from this run (for example: 5000).",
+    )
     args = parser.parse_args()
+    excluded_t_values = tuple(sorted(set(args.exclude_contextual_t)))
 
     outdir = outdir_for(args.mode, args.protocol)
     start = time.time()
@@ -1145,6 +1163,7 @@ def main():
                 "seed": args.seed,
                 "jobs": args.jobs,
                 "resume": args.resume,
+                "excluded_contextual_t_values": list(excluded_t_values),
                 "config": asdict(mode_config(args.mode)),
             },
             indent=2,
@@ -1155,11 +1174,33 @@ def main():
     if args.experiment in {"mab", "all"}:
         run_mab(args.mode, args.protocol, seed=args.seed)
     if args.experiment in {"tree", "all"}:
-        run_contextual_nonadaptive(args.mode, args.protocol, seed=args.seed, jobs=args.jobs, resume=args.resume)
+        run_contextual_nonadaptive(
+            args.mode,
+            args.protocol,
+            seed=args.seed,
+            jobs=args.jobs,
+            resume=args.resume,
+            exclude_t_values=excluded_t_values,
+        )
     if args.experiment in {"ts", "all"}:
-        run_ts_synthetic(args.mode, args.protocol, seed=args.seed, jobs=args.jobs, resume=args.resume)
+        run_ts_synthetic(
+            args.mode,
+            args.protocol,
+            seed=args.seed,
+            jobs=args.jobs,
+            resume=args.resume,
+            exclude_t_values=excluded_t_values,
+        )
     if args.experiment in {"ts-cv", "all"}:
-        run_ts_synthetic(args.mode, args.protocol, seed=args.seed, cv_only=True, jobs=args.jobs, resume=args.resume)
+        run_ts_synthetic(
+            args.mode,
+            args.protocol,
+            seed=args.seed,
+            cv_only=True,
+            jobs=args.jobs,
+            resume=args.resume,
+            exclude_t_values=excluded_t_values,
+        )
     if args.experiment in {"real", "all"}:
         run_real(args.mode, args.protocol, seed=args.seed, jobs=args.jobs, resume=args.resume)
 

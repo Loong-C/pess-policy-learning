@@ -29,6 +29,7 @@ from experiments.reproduce import (
     fit_linear_pevi,
 )
 from experiments.write_reproduction_report_zh import (
+    PRIMARY_MARGINS,
     _overall_verdict,
     _primary_rows,
 )
@@ -227,6 +228,28 @@ class ProtocolTests(unittest.TestCase):
                 )
             self.assertTrue((root / "chunks" / "errors.jsonl").exists())
 
+    def test_chunk_runner_ignores_chunks_outside_current_task_grid(self):
+        def finish(task):
+            return pd.DataFrame([{"task_id": task["task_id"], "value": 1.0}])
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            chunk_dir = root / "chunks"
+            chunk_dir.mkdir()
+            pd.DataFrame([{"task_id": "excluded", "value": 5000.0}]).to_csv(
+                chunk_dir / "excluded.csv",
+                index=False,
+            )
+            result = _run_chunked(
+                [{"task_id": "included"}],
+                finish,
+                chunk_dir,
+                root / "combined.csv",
+                jobs=1,
+                resume=True,
+            )
+            self.assertEqual(result["task_id"].tolist(), ["included"])
+
     def test_report_requires_every_primary_figure(self):
         summary = pd.DataFrame(
             [
@@ -258,6 +281,23 @@ class ProtocolTests(unittest.TestCase):
             "\u603b\u4f53\u5e73\u5747\u5c42\u9762\u590d\u73b0",
             aggregate_only,
         )
+
+    def test_report_does_not_claim_complete_reproduction_with_missing_cells(self):
+        summary = pd.DataFrame(
+            [
+                {
+                    "figure": figure,
+                    "margin": margin,
+                    "all_cells_equivalent": True,
+                    "clustered_mean_equivalent": True,
+                    "coverage_complete": figure not in {5, 6, 7, 8, 9},
+                }
+                for figure, margin in PRIMARY_MARGINS.items()
+            ]
+        )
+        verdict = _overall_verdict(_primary_rows(summary))
+        self.assertIn("截断范围内复现成功", verdict)
+        self.assertIn("不能认定论文第 7 节已完整复现", verdict)
 
     def test_published_real_grid_matches_released_script(self):
         betas, settings, datasets, batches, _, _ = _real_grid(

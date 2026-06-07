@@ -417,3 +417,25 @@ Interim complete-cell audit while the remaining full grid continues:
   tree parent, retained 2,979 completed tree chunks, and restarted the tree
   pool with 16 workers. The 24-worker TS pool was uninterrupted. Available
   memory returned to about 9.8 GB with CPU still fully utilized.
+
+## 2026-06-07 11:00:12 +08:00
+
+- At the user's request, stopped the active continuation scheduler, tree
+  experiment, and fixed-TS experiment and changed the current reproduction
+  campaign to exclude contextual `T=5000`.
+- Preserved all completed chunks: 3,016 tree chunks, including 16 partial
+  `T=5000` chunks, and 4,676 fixed-TS chunks. The 16 `T=5000` chunks remain
+  available for provenance but are not part of consolidated outputs.
+- Added `--exclude-contextual-t` to the maintained runner and propagated it to
+  the continuation scheduler. The current complete synthetic target is
+  `T={500,1000,2000}`: 9,000 tree chunks, 14,400 fixed-TS chunks, and 2,400
+  TS-CV chunks.
+- Corrected chunk consolidation so it reads only files belonging to the
+  current task grid. This prevents old or intentionally excluded chunks from
+  contaminating resumed CSVs and figures.
+- Added a regression test for excluded stale chunks. All 22 protocol/report
+  tests pass.
+- The eventual statistical conclusion must be stated conditionally: it can
+  establish aggregate and pointwise agreement over `T={500,1000,2000}`, but
+  cannot claim complete reproduction of the paper's contextual grid because
+  the paper also reports `T=5000`.

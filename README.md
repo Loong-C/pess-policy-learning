@@ -89,6 +89,22 @@ python experiments/reproduce.py --mode full --protocol published --experiment ts
 python experiments/reproduce.py --mode full --protocol published --experiment real --jobs 4 --resume --seed 20260605
 ```
 
+The current reproduction campaign deliberately excludes the very slow
+contextual `T=5000` cells at the user's request. The remaining synthetic grid
+is `T={500,1000,2000}` and is run with:
+
+```bash
+python experiments/reproduce.py --mode full --protocol published --experiment tree --jobs 28 --resume --seed 20260605 --exclude-contextual-t 5000
+python experiments/reproduce.py --mode full --protocol published --experiment ts --jobs 24 --resume --seed 20260605 --exclude-contextual-t 5000
+python experiments/reproduce.py --mode full --protocol published --experiment ts-cv --jobs 40 --resume --seed 20260605 --exclude-contextual-t 5000
+```
+
+This truncation is recorded in each run configuration. Existing `T=5000`
+chunks remain on disk for provenance but are excluded from consolidated CSVs,
+figures, and statistical comparisons. Consequently, the final report can
+assess complete pointwise reproduction only over `T={500,1000,2000}`, not over
+the paper's entire four-size contextual grid.
+
 Completed chunks are written below
 `artifacts/reproduction/<protocol>/<mode>/data/chunks/`; rerunning with
 `--resume` skips chunks already on disk.
@@ -100,10 +116,8 @@ After the queued TS-CV and real-data phases finish, it also runs the complete
 equivalence analysis, writes the Chinese report, and executes the protocol
 regression suite.
 
-Worker counts are a memory-aware operating point for this machine. The tree
-pool is reduced before `T=5000` cells because each R policy-tree worker grows
-substantially with the training sample size; `--resume` preserves all chunks
-when changing concurrency.
+Worker counts are a memory-aware operating point for this machine.
+`--resume` preserves all chunks when changing concurrency.
 
 `quick` mode is a smoke-test mode that keeps runtime manageable. `full` mode keeps the paper-scale settings where feasible:
 
