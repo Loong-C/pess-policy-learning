@@ -447,3 +447,30 @@ Interim complete-cell audit while the remaining full grid continues:
 - Verified 54 Python processes were active, all three parent processes were
   alive, and tree, TS, and scheduler stderr logs were empty. Both generated
   run configurations record `excluded_contextual_t_values: [5000]`.
+
+## 2026-06-07 11:26:03 +08:00
+
+- Replaced the obsolete June 5 report with a current Chinese stage report at
+  `artifacts/reproduction/reproduction_report_zh.md`. The report now directly
+  answers whether the available results reproduce the paper, rather than only
+  describing run status.
+- Added
+  `artifacts/reproduction/published/full/data/interim_equivalence_summary.csv`
+  as a compact machine-readable snapshot.
+- Figure 4 is a complete numerical reproduction: 168/168 cells are equivalent
+  at `alpha=0.05` and margin `0.0025`; MAE is about `0.000001`.
+- Figure 5 Scenario 1 over `T={500,1000,2000}` has 235/240 equivalent cells,
+  no clearly different cells, and five inconclusive cells at margin `0.05`.
+  The clustered mean difference is `-0.00049`, with 90% CI
+  `[-0.00357, 0.00260]` and TOST p-value `4.73e-14`. Best-grid PPL exceeds GPL
+  descriptively in all 15 complete configurations.
+- The current Figure 6 subset has 104/161 equivalent, 15 clearly different,
+  and 42 inconclusive curve points. Its clustered mean difference is
+  `-0.02726`, with 90% CI `[-0.03556, -0.01897]` and TOST p-value `5.39e-5`,
+  so the aggregate mean is equivalent but pointwise reproduction is not
+  complete. Best-grid PPL exceeds GPL descriptively in all 23 complete
+  configurations, with the largest gains near decay `0.5`, matching the
+  paper's qualitative conclusion.
+- Figures 7-10 remain unavailable for formal inference. The current overall
+  verdict is therefore partial reproduction, not successful reproduction of
+  the whole Section 7.

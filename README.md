@@ -141,6 +141,13 @@ Generated artifacts are stored in `artifacts/reproduction/`:
 - `paper_reference/`: numerical references digitized from the paper's vector figures.
 - `reproduction_report_zh.md`: Chinese report comparing the generated results with the paper and explaining statistical confidence.
 
+The Chinese report is updated during the run as well as at final completion.
+The current stage report already contains formal results for Figure 4 and the
+completed Figure 5/6 subsets, including TOST confidence intervals, qualitative
+comparison with the paper, and an explicit answer about reproduction success.
+Its machine-readable snapshot is
+`published/full/data/interim_equivalence_summary.csv`.
+
 The full Figure 5-10 grids are resumable multi-day CPU workloads. Runtime chunk
 files are intentionally ignored; consolidated CSVs, figures, reports, and run
 configurations are committed after completion.

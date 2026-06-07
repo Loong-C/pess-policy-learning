@@ -1,0 +1,4 @@
+figure,scope,margin,alpha,matched_cells,reference_cells,coverage_rate,equivalent_cells,different_cells,inconclusive_cells,mean_diff,mae,max_abs_diff,clustered_count,clustered_ci90_low,clustered_ci90_high,clustered_tost_p,clustered_mean_equivalent,conclusion
+4,all MAB cells,0.0025,0.05,168,168,1.0,168,0,0,-0.0000001,0.000001,0.000004,,,,,True,complete numerical reproduction
+5,scenario 1 and T 500 1000 2000,0.05,0.05,240,1080,0.222222,235,0,5,-0.00048888,0.00686594,0.04470110,15,-0.00357335,0.00259559,4.725936e-14,True,successful within completed subset
+6,T 500 1000 and seven of eight T 2000 configurations,0.05,0.05,161,224,0.71875,104,15,42,-0.02726418,0.02851663,0.12062892,23,-0.03556093,-0.01896743,5.386664e-05,True,aggregate and qualitative reproduction but not complete pointwise reproduction
