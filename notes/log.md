@@ -439,3 +439,11 @@ Interim complete-cell audit while the remaining full grid continues:
   establish aggregate and pointwise agreement over `T={500,1000,2000}`, but
   cannot claim complete reproduction of the paper's contextual grid because
   the paper also reports `T=5000`.
+- Committed and pushed the truncated-run implementation as `c7358a0`, then
+  restarted the tree phase with 28 workers (PID 50908) and fixed-TS with 24
+  workers (PID 50936). The continuation scheduler (PID 33204) is waiting for
+  both and will run TS-CV with 40 workers, real data with 4 workers, the
+  equivalence analysis, Chinese report generation, and all protocol tests.
+- Verified 54 Python processes were active, all three parent processes were
+  alive, and tree, TS, and scheduler stderr logs were empty. Both generated
+  run configurations record `excluded_contextual_t_values: [5000]`.

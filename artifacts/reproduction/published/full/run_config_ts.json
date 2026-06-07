@@ -5,6 +5,9 @@
   "seed": 20260605,
   "jobs": 24,
   "resume": true,
+  "excluded_contextual_t_values": [
+    5000
+  ],
   "config": {
     "mode": "full",
     "mab_nrep": 1000,

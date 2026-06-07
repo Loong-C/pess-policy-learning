@@ -3,8 +3,11 @@
   "protocol": "published",
   "experiment": "tree",
   "seed": 20260605,
-  "jobs": 16,
+  "jobs": 28,
   "resume": true,
+  "excluded_contextual_t_values": [
+    5000
+  ],
   "config": {
     "mode": "full",
     "mab_nrep": 1000,
